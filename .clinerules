@@ -1,0 +1,147 @@
+# Cline Rules: Primos CheckIn
+
+## Patrones de Implementación Críticos
+
+### 1. Manejo de Tiempo UTC
+- Siempre normalizar fechas a medianoche UTC (00:00:00.000) para comparaciones de días
+- Usar `Date.UTC()` para crear timestamps UTC consistentes
+- Verificar el cambio de día UTC en ambos lados (cliente y servidor)
+- Ejemplo correcto:
+```typescript
+const nowDate = new Date();
+const nowUTC = new Date(Date.UTC(
+  nowDate.getUTCFullYear(),
+  nowDate.getUTCMonth(),
+  nowDate.getUTCDate(),
+  0, 0, 0, 0
+));
+```
+
+### 2. Conexiones RPC Blockchain
+- Implementar siempre múltiples endpoints RPC con fallback
+- Usar el sistema de retry con backoff exponencial para operaciones blockchain
+- Configurar headers específicos para evitar problemas de referrer
+- Ejemplo correcto:
+```typescript
+const headers = {
+  'Content-Type': 'application/json',
+  'User-Agent': 'RoninRPC/1.0.0',
+  'Origin': 'https://localhost',
+  'Referrer-Policy': 'no-referrer'
+};
+```
+
+### 3. Manejo de NFTs
+- Sincronizar NFTs desde blockchain a base de datos para cálculos rápidos
+- Implementar lazy loading para visualización de NFTs
+- Calcular bonificaciones según rareza y atributos específicos
+- Verificar uso diario de NFTs con tabla `nft_usage_tracking`
+
+### 4. Reclamación de Tokens
+- Verificar siempre puntos disponibles antes de iniciar transacción
+- Implementar mecanismo de fallback con tabla `pending_rewards`
+- Actualizar leaderboard después de reclamaciones exitosas
+- Manejar errores de transacción con mensajes claros para el usuario
+
+## Preferencias de Workflow
+
+### Estructura de Código
+- Componentes React en carpetas dedicadas con archivos de estilos separados
+- Lógica de negocio en servicios y hooks reutilizables
+- API routes para operaciones del lado del servidor
+- Utilidades para funciones comunes y reutilizables
+
+### Convenciones de Nombrado
+- PascalCase para componentes React
+- camelCase para variables, funciones y propiedades
+- snake_case para tablas y columnas en Supabase
+- UPPER_CASE para constantes globales
+
+### Patrones de Estilo
+- Tailwind CSS para estilos con clases utilitarias
+- Colores principales: azul (#007bff), gris oscuro (#171717)
+- Fuentes: Inter (sans-serif)
+- Componentes UI con bordes redondeados y sombras sutiles
+
+## Conocimientos del Proyecto
+
+### Estructura de Base de Datos
+- **users**: Información de usuarios, streaks y puntos
+- **check_ins**: Registro de check-ins diarios
+- **nfts**: NFTs de los usuarios y sus bonificaciones
+- **nft_usage_tracking**: Seguimiento del uso diario de NFTs
+- **rewards**: Registro de recompensas reclamadas
+- **leaderboard**: Tabla de clasificación con datos agregados
+- **pending_rewards**: Recompensas pendientes en caso de fallos
+
+### Cálculo de Recompensas
+- Bonificaciones por rareza:
+  - Original: +1
+  - Original Z: +4
+  - Shiny: +7
+  - Shiny Z: +13
+  - Unique: +30
+  - Full Set (adicional): +2
+- Multiplicadores por streak:
+  - 1-7 días: x1.0
+  - 8-14 días: x1.5
+  - 15-21 días: x2.0
+  - 22-28 días: x2.5
+  - 29+ días: x3.0
+- Fórmula: Bonificación NFTs × Multiplicador Streak = Fire Dust
+
+### Contratos Blockchain
+- **CheckIn Contract**: Gestiona check-ins y streaks
+  - Mainnet: 0x215d0d82dbd0ca2bb0b6c4e68a5166ddddd5560b
+  - Testnet: 0x12ad694088243628f4038c1fab32ff89c2f986f2
+- **Fire Dust (ERC1155)**: Token de recompensa
+  - Dirección: 0xE3a334D6b7681D0151b81964CAf6353905e24B1b
+  - ID: 4
+- **Primos NFT (ERC721)**: NFTs que proporcionan bonificaciones
+  - Dirección: 0x23924869ff64ab205b3e3be388a373d75de74ebd
+
+### Variables de Entorno Requeridas
+```
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Blockchain
+REWARD_POOL_PRIVATE_KEY=
+RONIN_RPC_URL=
+RONIN_RPC_URL_BACKUP=
+MORALIS_API_KEY=
+```
+
+## Desafíos Conocidos
+
+### Problemas de Rendimiento
+- La carga de NFTs puede ser lenta con colecciones grandes
+- Las transacciones blockchain pueden tener latencia variable
+- La sincronización entre blockchain y base de datos puede generar inconsistencias temporales
+
+### Consideraciones de Seguridad
+- Proteger clave privada de wallet distribuidora
+- Validar inputs en todos los endpoints de API
+- Implementar rate limiting para prevenir abusos
+
+### Optimizaciones Pendientes
+- Implementar estrategias de caché para datos blockchain
+- Mejorar lazy loading y paginación para NFTs
+- Optimizar imágenes para carga más rápida
+- Implementar pruebas automatizadas
+
+## Evolución del Proyecto
+
+### Decisiones Técnicas Clave
+- Migración de Pages Router a App Router de Next.js
+- Implementación de sistema de fallback para conexiones RPC
+- Refactorización de endpoints de API para mayor seguridad
+- Optimización de visualización de NFTs con lazy loading
+
+### Cambios Planificados
+- Implementación de sistema de analytics
+- Mejoras en el leaderboard y funcionalidades sociales
+- Optimización para dispositivos móviles
+- Integración con otros productos del ecosistema Primos

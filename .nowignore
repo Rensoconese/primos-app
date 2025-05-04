@@ -1,0 +1,23 @@
+# Node modules
+node_modules
+
+# Build output
+.next
+out
+
+# Logs
+*.log
+
+# Environment variables locales (se configurarán en Vercel)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Directorios de caché y temporales
+.cache
+.temp
