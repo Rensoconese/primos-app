@@ -1,6 +1,7 @@
 import { supabase, updateLeaderboard } from '@/utils/supabase';
 import { ethers } from 'ethers';
 import { abi as ERC721ABI } from '@/utils/erc721-abi'; // You'll need to create this file with the ABI
+import { isNFTLocked, lockNFT } from './redisService';
 
 // Primos NFT contract address
 export const PRIMOS_NFT_CONTRACT = '0x23924869ff64ab205b3e3be388a373d75de74ebd';
@@ -244,8 +245,10 @@ export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, wal
   }
 }
 
-export async function calculateNFTPoints(walletAddress: string) {
+export async function calculateNFTPoints(walletAddress: string, blockNFTs: boolean = false) {
   try {
+    console.log(`Calculando puntos de NFTs para wallet ${walletAddress}`);
+    
     // Get all of the user's NFTs
     const { data: nfts, error } = await supabase
       .from('nfts')
@@ -254,30 +257,33 @@ export async function calculateNFTPoints(walletAddress: string) {
     
     if (error) throw error;
     
-    // Get NFTs already used today by ANY wallet
-    const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-    const { data: usedNfts, error: usedError } = await supabase
-      .from('nft_usage_tracking')
-      .select('token_id, contract_address')
-      .eq('usage_date', today);
-    // Note: We no longer filter by wallet_address
+    console.log(`Encontrados ${nfts?.length || 0} NFTs en la base de datos para wallet ${walletAddress}`);
     
-    if (usedError) throw usedError;
+    // Array para almacenar NFTs elegibles
+    const eligibleNfts = [];
+    let totalPoints = 0;
     
-    // Create a set of used NFTs for quick lookup
-    const usedNftSet = new Set();
-    usedNfts?.forEach(nft => {
-      const key = `${nft.token_id}-${nft.contract_address}`;
-      usedNftSet.add(key);
-    });
+    // Verificar cada NFT SOLO en Redis
+    for (const nft of nfts || []) {
+      // Verificar en Redis si el NFT está bloqueado
+      const isLocked = await isNFTLocked(nft.contract_address, nft.token_id);
+      
+      if (!isLocked) {
+        // Si no está bloqueado, lo añadimos a los elegibles
+        eligibleNfts.push(nft);
+        totalPoints += (nft.bonus_points || 0);
+        
+        // Bloqueamos el NFT para este wallet solo si blockNFTs es true
+        if (blockNFTs) {
+          const lockResult = await lockNFT(nft.contract_address, nft.token_id, walletAddress);
+          console.log(`NFT ${nft.contract_address}:${nft.token_id} ${lockResult ? 'bloqueado' : 'no se pudo bloquear'} para wallet ${walletAddress}`);
+        }
+      } else {
+        console.log(`NFT ${nft.contract_address}:${nft.token_id} ya está bloqueado, no disponible para wallet ${walletAddress}`);
+      }
+    }
     
-    // Filter unused NFTs and sum their points
-    const eligibleNfts = nfts?.filter(nft => {
-      const key = `${nft.token_id}-${nft.contract_address}`;
-      return !usedNftSet.has(key);
-    }) || [];
-    
-    const totalPoints = eligibleNfts.reduce((sum, nft) => sum + (nft.bonus_points || 0), 0);
+    console.log(`Total de NFTs elegibles: ${eligibleNfts.length}, Total de puntos: ${totalPoints}`);
     
     return { 
       success: true, 

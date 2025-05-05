@@ -10,6 +10,18 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 
 ## Cambios Recientes
 
+### Integración de Redis para Bloqueo de NFTs
+- Implementación de sistema de bloqueo global de NFTs utilizando Redis (Upstash)
+- Creación de servicio `redisService.ts` para gestionar operaciones de Redis
+- Modificación de `calculateNFTPoints` para bloquear NFTs solo durante check-in
+- Creación de endpoints para gestión y monitoreo de Redis (`/api/redis-stats`, `/api/redis-clear`)
+- Solución de problema de bloqueo prematuro de NFTs al cargar la página
+
+### Control de Versiones y Colaboración
+- Subida del proyecto completo a GitHub (https://github.com/Rensoconese/Primos_check_in)
+- Configuración del repositorio con estructura de archivos y documentación
+- Establecimiento de la base para colaboración y control de versiones
+
 ### Integración Blockchain
 - Implementación de sistema de fallback para conexiones RPC con múltiples endpoints
 - Mejora en el manejo de errores y reintentos para transacciones blockchain
@@ -19,6 +31,7 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Optimización del proceso de sincronización de NFTs entre blockchain y base de datos
 - Implementación de lazy loading para mejorar el rendimiento en la visualización de NFTs
 - Refinamiento del cálculo de bonificaciones basado en rareza y atributos
+- Implementación de bloqueo global de NFTs con Redis para prevenir uso múltiple
 
 ### Experiencia de Usuario
 - Mejora en la visualización de streaks y multiplicadores
@@ -29,6 +42,7 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Refactorización de endpoints de API para mayor consistencia y seguridad
 - Mejora en la sincronización entre blockchain y base de datos
 - Implementación de mecanismo de fallback para reclamaciones de tokens
+- Migración del sistema de bloqueo de NFTs de Supabase a Redis
 
 ## Próximos Pasos
 
@@ -36,6 +50,7 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 1. **Resolución de Problemas de Despliegue**: Solucionar configuraciones en Vercel según la guía de despliegue
 2. **Optimización de Rendimiento**: Reducir tiempos de carga y mejorar la eficiencia de las operaciones
 3. **Pruebas de Integración**: Verificar el funcionamiento correcto de todos los componentes en conjunto
+4. **Configuración de CI/CD**: Implementar integración continua utilizando el repositorio de GitHub
 
 ### Medio Plazo (1-2 Meses)
 1. **Implementación de Analytics**: Añadir seguimiento de métricas clave para evaluar el rendimiento del producto

@@ -120,8 +120,8 @@ export async function POST(req: NextRequest) {
     else if (user.current_streak >= 15) multiplier = 2.0;
     else if (user.current_streak >= 8) multiplier = 1.5;
     
-    // Calcular puntos basados en NFTs
-    const { totalPoints, eligibleNfts } = await calculateNFTPoints(wallet_address);
+    // Calcular puntos basados en NFTs y bloquearlos en Redis
+    const { totalPoints, eligibleNfts } = await calculateNFTPoints(wallet_address, true);
     
     // Aplicar multiplicador al total de puntos de NFTs
     // Si no tiene NFTs, no asignar puntos
@@ -148,34 +148,10 @@ export async function POST(req: NextRequest) {
     
     if (checkInError) throw checkInError;
     
-    // Registrar los NFTs usados en este check-in
-    if (eligibleNfts && eligibleNfts.length > 0) {
-      try {
-        const nftUsageRecords = eligibleNfts.map(nft => ({
-          token_id: nft.token_id,
-          contract_address: nft.contract_address,
-          wallet_address: wallet_address.toLowerCase(),
-          check_in_id: checkIn.id,
-          // usage_date se establece automáticamente como la fecha actual por el valor predeterminado
-        }));
-
-        const { error: usageError } = await supabase
-          .from('nft_usage_tracking')
-          .insert(nftUsageRecords);
-
-        if (usageError) {
-          // Si el error es por restricción única, significa que algún NFT ya fue usado hoy
-          if (usageError.code === '23505') { // Código de error de PostgreSQL para violación de restricción única
-            console.log('Algunos NFTs ya fueron usados hoy por otra wallet');
-          } else {
-            console.error('Error registering NFT usage:', usageError);
-          }
-        }
-      } catch (error) {
-        console.error('Error registering NFT usage:', error);
-        // No fallamos el check-in si esto falla, solo registramos el error
-      }
-    }
+// Los NFTs ya están bloqueados en Redis desde calculateNFTPoints
+if (eligibleNfts && eligibleNfts.length > 0) {
+  console.log(`Check-in completado con ${eligibleNfts.length} NFTs bloqueados en Redis para la wallet ${wallet_address}`);
+}
     
     // Actualizar total_points
     const { error: pointsError } = await supabase

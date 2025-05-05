@@ -5,6 +5,7 @@ import { ethers } from 'ethers';
 import { fetchUserNFTs, calculateNFTPoints, PRIMOS_NFT_CONTRACT } from '@/services/nftService';
 import { supabase } from '@/utils/supabase';
 import HowRewardsWorks from './HowRewardsWorks';
+import { isNFTLocked } from '@/services/redisService';
 
 interface NFTDisplayProps {
   provider: ethers.providers.Web3Provider | null;
@@ -64,36 +65,30 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
           }
         }
         
-        // Get NFTs already used today by ANY wallet
-        const today = new Date().toISOString().split('T')[0];
-        console.log("Checking nft_usage_tracking for date:", today);
-        const { data: usedNfts, error: usedError } = await supabase
-          .from('nft_usage_tracking')
-          .select('token_id, contract_address')
-          .eq('usage_date', today);
-        // Note: We no longer filter by wallet_address
-        
-        console.log("Used NFTs found:", usedNfts?.length || 0);
-        
-        if (usedError) throw usedError;
-        
-        // Create a set of used NFTs
-        const usedNftSet = new Set();
-        usedNfts?.forEach(nft => {
-          const key = `${nft.token_id}-${nft.contract_address}`;
-          usedNftSet.add(key);
-          console.log("Adding used NFT to set:", key);
-        });
-        
-        // Mark NFTs as used
-        const nftsWithUsageStatus = userNfts ? userNfts.map(nft => {
-          const key = `${nft.tokenId}-${PRIMOS_NFT_CONTRACT.toLowerCase()}`;
-          const isUsedToday = usedNftSet.has(key);
-          console.log(`NFT ID:${nft.tokenId}, Key:${key}, IsUsed:${isUsedToday}`);
-          return { ...nft, isUsedToday };
-        }) : [];
-        
-        setNfts(nftsWithUsageStatus);
+      // Verificar en Redis si los NFTs están bloqueados
+      console.log("Verificando NFTs bloqueados en Redis");
+      
+      // Procesar cada NFT para verificar si está bloqueado en Redis
+      const nftsWithUsageStatus = [];
+      
+      if (userNfts && userNfts.length > 0) {
+        for (const nft of userNfts) {
+          // Verificar en Redis si el NFT está bloqueado
+          const isUsedToday = await isNFTLocked(
+            PRIMOS_NFT_CONTRACT.toLowerCase(),
+            nft.tokenId.toString()
+          );
+          
+          console.log(`NFT ID:${nft.tokenId}, IsLocked:${isUsedToday}`);
+          
+          nftsWithUsageStatus.push({
+            ...nft,
+            isUsedToday
+          });
+        }
+      }
+      
+      setNfts(nftsWithUsageStatus);
         
         // Check if there's a check-in query parameter in the URL, which indicates a recent check-in
         const urlParams = new URLSearchParams(window.location.search);
@@ -147,7 +142,8 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
         }
         
         // Calculate NFT points - both eligible (unused) and total
-        const { totalPoints: eligibleNftPoints, eligibleNfts } = await calculateNFTPoints(userAddress);
+        // Pasamos false para que no bloquee los NFTs, solo los verifique
+        const { totalPoints: eligibleNftPoints, eligibleNfts } = await calculateNFTPoints(userAddress, false);
         setEligiblePoints(eligibleNftPoints);
         
         // Now calculate total points from all NFTs regardless of usage
