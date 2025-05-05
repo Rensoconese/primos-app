@@ -65,27 +65,40 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
           }
         }
         
-      // Verificar en Redis si los NFTs están bloqueados
-      console.log("Verificando NFTs bloqueados en Redis");
+      // Verificar en Redis si los NFTs están bloqueados (en paralelo)
+      console.log("Verificando NFTs bloqueados en Redis (en paralelo)");
       
-      // Procesar cada NFT para verificar si está bloqueado en Redis
-      const nftsWithUsageStatus = [];
+      let nftsWithUsageStatus: any[] = [];
       
       if (userNfts && userNfts.length > 0) {
-        for (const nft of userNfts) {
-          // Verificar en Redis si el NFT está bloqueado
-          const isUsedToday = await isNFTLocked(
-            PRIMOS_NFT_CONTRACT.toLowerCase(),
-            nft.tokenId.toString()
-          );
-          
-          console.log(`NFT ID:${nft.tokenId}, IsLocked:${isUsedToday}`);
-          
-          nftsWithUsageStatus.push({
-            ...nft,
-            isUsedToday
-          });
-        }
+        console.log(`Iniciando verificación paralela de ${userNfts.length} NFTs...`);
+        
+        // Crear un array de promesas para verificar todos los NFTs simultáneamente
+        const lockCheckPromises = userNfts.map(async (nft) => {
+          try {
+            const isUsedToday = await isNFTLocked(
+              PRIMOS_NFT_CONTRACT.toLowerCase(),
+              nft.tokenId.toString()
+            );
+            
+            console.log(`NFT ID:${nft.tokenId}, IsLocked:${isUsedToday}`);
+            
+            return {
+              ...nft,
+              isUsedToday
+            };
+          } catch (err) {
+            console.error(`Error verificando NFT ${nft.tokenId}:`, err);
+            // En caso de error, asumimos que no está bloqueado para permitir su visualización
+            return {
+              ...nft,
+              isUsedToday: false
+            };
+          }
+        });
+        
+        // Esperar a que todas las verificaciones se completen
+        nftsWithUsageStatus = await Promise.all(lockCheckPromises);
       }
       
       setNfts(nftsWithUsageStatus);
