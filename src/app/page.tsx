@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import ContractInteraction from '@/components/ContractInteraction';
 import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet';
@@ -18,6 +18,7 @@ export default function Home() {
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [userDataRefresh, setUserDataRefresh] = useState<number>(0);
   const [nftCalculationInProgress, setNftCalculationInProgress] = useState<boolean>(false);
+  // Removed state for passing functions between components
 
   // Función para obtener el nombre de la red
   const getNetworkName = (chainId: number): string => {
@@ -91,10 +92,41 @@ export default function Home() {
     loadUserData();
   }, [userAddress, userDataRefresh]);
 
-  // Función para actualizar datos después de check-in o reclamo
+  // Función para actualizar datos después de check-in
   const handleDataRefresh = () => {
     setUserDataRefresh(prev => prev + 1);
   };
+  
+  // Función separada para actualizar datos después de reclamar tokens
+  // Esta no actualiza el refreshTrigger para evitar recargar NFTDisplay
+  const handleRewardClaimed = useCallback(() => {
+    // Solo actualizar el total de puntos sin afectar al componente NFTDisplay
+    if (userAddress) {
+      // Actualizar solo los datos de puntos
+      const loadUserPoints = async () => {
+        try {
+          const response = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
+          const result = await response.json();
+          
+          if (result.data) {
+            setTotalPoints(result.data.total_points || 0);
+          } else {
+            setTotalPoints(0);
+          }
+        } catch (err) {
+          console.error('Error updating points after reward claim:', err);
+        }
+      };
+      
+      loadUserPoints();
+    }
+  }, [userAddress]);
+  
+  // Memoizar la función de cambio de estado de carga para evitar bucles infinitos
+  const handleNFTLoadingChange = useCallback((isLoading: boolean) => {
+    console.log("Estado de carga NFT cambiado:", isLoading);
+    setNftCalculationInProgress(isLoading);
+  }, []);
 
   return (
     <div className="min-h-screen relative" style={{
@@ -153,14 +185,14 @@ export default function Home() {
                     userAddress={userAddress}
                     onCheckInSuccess={handleDataRefresh}
                     nftCalculationInProgress={nftCalculationInProgress}
-                    refreshTrigger={userDataRefresh} // Add refreshTrigger prop
+                    refreshTrigger={userDataRefresh}
                   />
                   
                   <NFTDisplay 
                     provider={provider} 
                     userAddress={userAddress}
                     refreshTrigger={userDataRefresh}
-                    onLoadingStateChange={setNftCalculationInProgress}
+                    onLoadingStateChange={handleNFTLoadingChange}
                   />
                 </div>
                 
@@ -168,7 +200,7 @@ export default function Home() {
                   <RewardsPanel 
                     userAddress={userAddress} 
                     totalPoints={totalPoints} 
-                    onRewardClaimed={handleDataRefresh} 
+                    onRewardClaimed={handleRewardClaimed} 
                     provider={provider}
                   />
                 </div>

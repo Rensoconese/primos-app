@@ -588,6 +588,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
 
           // Después de una transacción exitosa, registrar en Supabase
           try {
+            // Simplemente registrar el check-in sin enviar datos de NFTs
             const response = await fetch('/api/check-in', {
               method: 'POST',
               headers: {
@@ -595,7 +596,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
               },
               body: JSON.stringify({
                 wallet_address: userAddress,
-                transaction_hash: tx.hash,
+                transaction_hash: tx.hash
               }),
             });
             
@@ -608,14 +609,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
             // Check if streak was broken
             const streakBroken = result.streakBroken;
             
-            // If streak was broken, redirect with streakBroken parameter
-            if (streakBroken) {
-              // Update the URL with streakBroken and check_in parameters
-              const url = new URL(window.location.href);
-              url.searchParams.set('check_in', 'true');
-              url.searchParams.set('streak_broken', 'true');
-              window.history.pushState({}, '', url.toString());
-            }
+            // Ya no necesitamos actualizar los parámetros de URL para el streak roto
+            // ya que el mensaje se muestra directamente en el componente de streak
             
             // Actualizar la interfaz con la información de puntos
             setSuccess(`Successfully checked in! `);

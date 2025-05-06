@@ -11,7 +11,7 @@ interface NFTDisplayProps {
   provider: ethers.providers.Web3Provider | null;
   userAddress: string | null;
   refreshTrigger?: number; // New prop to trigger updates
-  onLoadingStateChange?: (isLoading: boolean) => void; // Add new prop for callback
+  onLoadingStateChange?: (isLoading: boolean) => void; // Simplified callback
 }
 
 const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshTrigger, onLoadingStateChange }) => {
@@ -25,7 +25,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
   const [streak, setStreak] = useState<number>(0);
   const [multiplier, setMultiplier] = useState<number>(1);
   const [totalPoints, setTotalPoints] = useState<number>(0);
-  const [streakBroken, setStreakBroken] = useState<boolean>(false);
+  // Eliminado el estado streakBroken que ya no es necesario
   
   // Simple carousel state
   const [currentSlide, setCurrentSlide] = useState<number>(0);
@@ -38,6 +38,14 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
   const observerRef = useRef<IntersectionObserver | null>(null);
   const imageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   
+  // Referencia para la función onLoadingStateChange para evitar dependencias circulares
+  const onLoadingStateChangeRef = useRef(onLoadingStateChange);
+  
+  // Actualizar la referencia cuando cambia la prop
+  useEffect(() => {
+    onLoadingStateChangeRef.current = onLoadingStateChange;
+  }, [onLoadingStateChange]);
+  
   useEffect(() => {
     if (!provider || !userAddress) return;
     
@@ -46,7 +54,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
     const loadData = async () => {
       setLoading(true);
       // Notify parent component that loading started
-      if (onLoadingStateChange) onLoadingStateChange(true);
+      if (onLoadingStateChangeRef.current) onLoadingStateChangeRef.current(true);
       setError(null);
       
       try {
@@ -86,14 +94,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
         console.log(`Procesados ${nftsWithUsageStatus.length} NFTs con su estado de bloqueo`);
         setNfts(nftsWithUsageStatus);
         
-        // Check if there's a check-in query parameter in the URL, which indicates a recent check-in
-        const urlParams = new URLSearchParams(window.location.search);
-        const recentCheckIn = urlParams.get('check_in') === 'true';
-        const streakBrokenParam = urlParams.get('streak_broken') === 'true';
-        
-        if (recentCheckIn && streakBrokenParam) {
-          setStreakBroken(true);
-        }
+        // Eliminada la verificación de parámetros de URL para streak roto
         
         // Load user information using the API instead of direct Supabase access
         console.log('Fetching user data from API...');
@@ -106,17 +107,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
         
         const userData = userDataResult.data;
         
-        // Also check if the user data indicates a streak break
-        // but only show the message if the current streak is still 0
-        if (userData) {
-          if (userData.streak_broken && userData.current_streak === 0) {
-            console.log("Streak broken detected from API data");
-            setStreakBroken(true);
-          } else if (userData.current_streak > 0) {
-            // Clear the streak broken message if user has a streak > 0
-            setStreakBroken(false);
-          }
-        }
+        // Eliminada la verificación de streak roto en los datos del usuario
         
         if (userData) {
           setStreak(userData.current_streak || 0);
@@ -164,13 +155,16 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
         }
       } finally {
         setLoading(false);
+        
         // Notify parent component that loading finished
-        if (onLoadingStateChange) onLoadingStateChange(false);
+        if (onLoadingStateChange) {
+          onLoadingStateChange(false);
+        }
       }
     };
     
     loadData();
-  }, [provider, userAddress, refreshTrigger, onLoadingStateChange]);
+  }, [provider, userAddress, refreshTrigger]); // Eliminada la dependencia onLoadingStateChange
   
   // Handle responsive sizing for carousel - maximum 4 on desktop as requested
   useEffect(() => {
@@ -307,6 +301,8 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
     return nfts.slice(currentSlide, currentSlide + itemsPerView);
   };
   
+  // No more references or functions for passing data between components
+  
   // Calculate potential daily points using totalBonusPoints instead of eligiblePoints
   const dailyPointsPotential = totalBonusPoints * multiplier;
   
@@ -336,14 +332,6 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
     <div className="bg-gray-800 rounded-lg shadow-md p-6 mt-8 text-white">
       
       <h2 className="text-2xl font-bold mb-4 uppercase">Bonus rewards</h2> 
-      
-      {streakBroken && (
-        <div className="bg-red-100 text-red-700 p-4 rounded-md mb-4 border-l-4 border-red-500">
-          <p className="font-bold">Streak Lost!</p>
-          <p>You have lost your daily check-in streak. Your streak has been reset to 0.</p>
-          <p className="text-sm mt-1">Remember to check in every day to maintain your streak and earn better multipliers.</p>
-        </div>
-      )}
       
       {error && (
         <div className="bg-red-100 text-red-700 p-4 rounded-md mb-4">

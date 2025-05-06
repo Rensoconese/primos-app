@@ -40,6 +40,8 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Mejora en la visualización de streaks y multiplicadores
 - Implementación de animaciones para check-in y reclamación de tokens
 - Optimización de la visualización del leaderboard
+- Eliminación de mensaje duplicado de streak roto, manteniéndolo solo en el componente de streak
+- Solución del problema de bucle infinito de recálculos al reclamar tokens
 
 ### Backend y Base de Datos
 - Refactorización de endpoints de API para mayor consistencia y seguridad

@@ -256,7 +256,8 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
       // Mostrar mensaje de éxito
       setSuccess(`Successfully claimed ${totalPoints} Fire Dust tokens!`);
       
-      // Actualizar la UI del componente padre
+      // Actualizar la UI del componente padre sin recargar NFTDisplay
+      console.log("Llamando a onRewardClaimed (actualización específica para recompensas)");
       onRewardClaimed();
     } catch (err: any) {
       console.error('Error claiming rewards:', err);

@@ -32,6 +32,8 @@
 - ✅ **Bloqueo Global de NFTs**: Prevención de uso múltiple de NFTs con Redis
 - ✅ **Verificación Paralela de NFTs**: Implementación de Promise.all() para verificar y bloquear NFTs en paralelo
 - ✅ **Eliminación de Verificación Duplicada**: Reducción de llamadas a Redis eliminando verificaciones redundantes
+- ✅ **Solución de Bucle Infinito**: Eliminación del bucle infinito de recálculos al reclamar tokens
+- ✅ **Mejora de UX**: Eliminación de mensaje duplicado de streak roto
 
 ### Control de Versiones y Colaboración
 - ✅ **Repositorio GitHub**: Proyecto subido y configurado en GitHub
