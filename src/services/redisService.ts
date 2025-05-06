@@ -30,22 +30,7 @@ console.log('Redis Token:', getRedisToken() ? 'Configurado' : 'No configurado');
 // Prefijo para las claves de NFTs bloqueados
 const NFT_KEY_PREFIX = 'nft:locked:';
 
-/**
- * Calcula el tiempo hasta el próximo reset de día UTC (medianoche)
- * @returns Segundos hasta medianoche UTC
- */
-export function calculateNextUTCReset(): number {
-  const now = new Date();
-  const tomorrow = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1,
-    0, 0, 0, 0
-  ));
-  
-  // Devuelve TTL en segundos
-  return Math.floor((tomorrow.getTime() - now.getTime()) / 1000);
-}
+import { getSecondsUntilNextUTCMidnight, getUTCDebugInfo } from './dateService';
 
 /**
  * Genera la clave Redis para un NFT
@@ -60,7 +45,7 @@ function getNFTKey(contractAddress: string, tokenId: string): string {
  */
 export async function lockNFT(contractAddress: string, tokenId: string, walletAddress: string): Promise<boolean> {
   const key = getNFTKey(contractAddress, tokenId);
-  const ttl = calculateNextUTCReset();
+  const ttl = getSecondsUntilNextUTCMidnight();
   
   // Almacenar la wallet que bloqueó el NFT
   const result = await redis.set(key, walletAddress.toLowerCase(), { 
@@ -177,7 +162,7 @@ export default {
   getNFTLockInfo,
   unlockNFT,
   getLockedNFTsByWallet,
-  calculateNextUTCReset,
   getNFTLockStats,
-  testConnection
+  testConnection,
+  getSecondsUntilNextUTCMidnight
 };

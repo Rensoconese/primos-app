@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { getContract, retry, safeNumberFromBN, safeStringFromBN, directContractCall, RONIN_CHAIN_IDS } from '@/utils/contract';
 import { createClient } from '@/utils/supabase/client';
+import { getSecondsUntilNextUTCMidnight, formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
 
 interface ContractInteractionProps {
   provider: ethers.providers.Web3Provider | null;
@@ -471,32 +472,17 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     const calculateTimeLeft = () => {
       const now = new Date();
       
-      // Calculate time until the next UTC midnight
-      const tomorrow = new Date(now);
-      tomorrow.setUTCHours(24, 0, 0, 0); // Next UTC midnight
+      // Calcular segundos hasta la próxima medianoche UTC usando dateService
+      const secondsUntilMidnight = getSecondsUntilNextUTCMidnight();
       
-      const difference = tomorrow.getTime() - now.getTime();
-      
-      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+      // Convertir segundos a horas, minutos y segundos
+      const hours = Math.floor(secondsUntilMidnight / 3600);
+      const minutes = Math.floor((secondsUntilMidnight % 3600) / 60);
+      const seconds = Math.floor(secondsUntilMidnight % 60);
       
       // Log para debugging
-      if (hours === 23 && minutes >= 58) {
-        console.log('DEBUG UTC Reset - Casi medianoche UTC:', {
-          now: now.toISOString(),
-          nowUTC: new Date(Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate(),
-            now.getUTCHours(),
-            now.getUTCMinutes(),
-            now.getUTCSeconds()
-          )).toISOString(),
-          nextMidnight: tomorrow.toISOString(),
-          difference,
-          hours, minutes, seconds
-        });
+      if (hours === 0 && minutes <= 2) {
+        console.log('DEBUG UTC Reset - Casi medianoche UTC:', getUTCDebugInfo('ContractInteraction', now));
       }
       
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;

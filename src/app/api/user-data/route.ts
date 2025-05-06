@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { normalizeToUTCMidnight, isSameUTCDay, getDayDifferenceUTC, getUTCDebugInfo } from '@/services/dateService';
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -24,34 +25,24 @@ export async function GET(req: NextRequest) {
       
     // If we have data, add UTC check-in status
     if (data && data.last_check_in) {
-      // Normalizar correctamente ambas fechas a medianoche UTC
       const lastCheckInDate = new Date(data.last_check_in);
-      // Crear fecha UTC normalizada a medianoche (00:00:00.000)
-      const lastCheckInUTC = new Date(Date.UTC(
-        lastCheckInDate.getUTCFullYear(),
-        lastCheckInDate.getUTCMonth(),
-        lastCheckInDate.getUTCDate(),
-        0, 0, 0, 0
-      ));
-      
       const nowDate = new Date();
-      // Crear fecha actual UTC normalizada a medianoche (00:00:00.000)
-      const nowUTC = new Date(Date.UTC(
-        nowDate.getUTCFullYear(),
-        nowDate.getUTCMonth(),
-        nowDate.getUTCDate(),
-        0, 0, 0, 0
-      ));
       
-      console.log('DEBUG UTC Reset - User-Data API - Last check-in timestamp (UTC):', lastCheckInUTC.toISOString());
-      console.log('DEBUG UTC Reset - User-Data API - Current date timestamp (UTC):', nowUTC.toISOString());
+      // Normalizar fechas a medianoche UTC usando dateService
+      const lastCheckInUTC = normalizeToUTCMidnight(lastCheckInDate);
+      const nowUTC = normalizeToUTCMidnight(nowDate);
       
-      // Comparar los timestamps directamente para mayor precisión
-      data.checked_in_today_utc = (lastCheckInUTC.getTime() === nowUTC.getTime());
+      // Log de depuración con información detallada
+      console.log('DEBUG UTC:', getUTCDebugInfo('User-Data API', nowDate));
       
-      // Calculate the difference in days
-      const timeDiff = Math.abs(nowUTC.getTime() - lastCheckInUTC.getTime());
-      const daysDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
+      // Verificar si es el mismo día UTC
+      data.checked_in_today_utc = isSameUTCDay(lastCheckInDate, nowDate);
+      
+      // Calcular diferencia en días
+      const daysDiff = getDayDifferenceUTC(lastCheckInDate, nowDate);
+      
+      // Calcular diferencia en horas (aproximada)
+      const timeDiff = Math.abs(nowDate.getTime() - lastCheckInDate.getTime());
       const hoursDiff = timeDiff / (1000 * 3600);
       
       data.hours_since_last_checkin = hoursDiff;

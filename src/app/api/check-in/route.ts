@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { ethers } from 'ethers';
 import { calculateNFTPoints } from '@/services/nftService';
 import { updateLeaderboard } from '@/utils/supabase';
+import { normalizeToUTCMidnight, isSameUTCDay, getDayDifferenceUTC, getUTCDebugInfo } from '@/services/dateService';
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,31 +46,15 @@ export async function POST(req: NextRequest) {
       const lastCheckIn = new Date(user.last_check_in);
       const now = new Date();
       
-      // Normalizar correctamente ambas fechas a medianoche UTC para comparación consistente
+      // Normalizar fechas a medianoche UTC usando dateService
       const lastCheckInDate = new Date(user.last_check_in);
-      // Crear fecha UTC normalizada a medianoche (00:00:00.000)
-      const lastCheckInUTC = new Date(Date.UTC(
-        lastCheckInDate.getUTCFullYear(),
-        lastCheckInDate.getUTCMonth(),
-        lastCheckInDate.getUTCDate(),
-        0, 0, 0, 0
-      ));
-      
       const nowDate = new Date();
-      // Crear fecha actual UTC normalizada a medianoche (00:00:00.000)
-      const nowUTC = new Date(Date.UTC(
-        nowDate.getUTCFullYear(),
-        nowDate.getUTCMonth(),
-        nowDate.getUTCDate(),
-        0, 0, 0, 0
-      ));
       
-      console.log('DEBUG UTC Reset - Last check-in timestamp (UTC):', lastCheckInUTC.toISOString());
-      console.log('DEBUG UTC Reset - Current date timestamp (UTC):', nowUTC.toISOString());
-      console.log('DEBUG UTC Reset - Same UTC day?', lastCheckInUTC.getTime() === nowUTC.getTime());
+      // Log de depuración con información detallada
+      console.log('DEBUG UTC:', getUTCDebugInfo('Check-in API', nowDate));
       
-      // Comparar los timestamps directamente para mayor precisión
-      if (lastCheckInUTC.getTime() === nowUTC.getTime()) {
+      // Verificar si es el mismo día UTC
+      if (isSameUTCDay(lastCheckInDate, nowDate)) {
         return NextResponse.json({ 
           error: 'Already checked in today (UTC)',
           user
@@ -77,8 +62,7 @@ export async function POST(req: NextRequest) {
       }
       
       // Calculamos la diferencia en días para el streak
-      const timeDiff = Math.abs(nowUTC.getTime() - lastCheckInUTC.getTime());
-      const daysDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
+      const daysDiff = getDayDifferenceUTC(lastCheckInDate, nowDate);
       
       // Si es el día siguiente, incrementar streak
       // Si hay más de un día de diferencia, reiniciar el streak a 1 cuando se hace check-in

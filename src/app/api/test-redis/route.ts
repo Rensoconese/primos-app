@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
     
     // Calcular TTL hasta el próximo reset
-    const ttl = redisService.calculateNextUTCReset();
+    const ttl = redisService.getSecondsUntilNextUTCMidnight();
     
     return NextResponse.json({ 
       success: true, 
