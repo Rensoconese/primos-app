@@ -274,7 +274,7 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     
     if (!nfts || nfts.length === 0) {
       console.log('No se encontraron NFTs para esta wallet');
-      return { success: true, totalPoints: 0, eligibleNfts: [] };
+      return { success: true, totalPoints: 0, eligibleNfts: [], nftStatusMap: {} };
     }
     
     // Paso 1: Verificar todos los NFTs en paralelo
@@ -303,30 +303,29 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     const eligibleNfts: NFT[] = [];
     let totalPoints = 0;
     
-    // Filtrar los NFTs que no están bloqueados
-    const unlockedNfts = lockCheckResults
-      .filter(result => !result.isLocked)
-      .map(result => result.nft);
+    // Crear un mapa de estado de NFTs (bloqueado/desbloqueado)
+    const nftStatusMap: Record<string, boolean> = {};
     
-    // Calcular puntos totales
-    unlockedNfts.forEach(nft => {
-      eligibleNfts.push(nft);
-      totalPoints += (nft.bonus_points || 0);
+    // Procesar resultados y construir el mapa de estado
+    lockCheckResults.forEach(result => {
+      // Guardar el estado en el mapa (true = bloqueado, false = disponible)
+      nftStatusMap[result.nft.token_id] = result.isLocked;
+      
+      // Si no está bloqueado, añadir a elegibles
+      if (!result.isLocked) {
+        eligibleNfts.push(result.nft);
+        totalPoints += (result.nft.bonus_points || 0);
+      } else {
+        console.log(`NFT ${result.nft.contract_address}:${result.nft.token_id} ya está bloqueado, no disponible para wallet ${walletAddress}`);
+      }
     });
     
-    // Registrar NFTs bloqueados
-    lockCheckResults
-      .filter(result => result.isLocked)
-      .forEach(result => {
-        console.log(`NFT ${result.nft.contract_address}:${result.nft.token_id} ya está bloqueado, no disponible para wallet ${walletAddress}`);
-      });
-    
     // Paso 3: Si es necesario, bloquear los NFTs elegibles en paralelo
-    if (blockNFTs && unlockedNfts.length > 0) {
-      console.log(`Bloqueando ${unlockedNfts.length} NFTs elegibles en paralelo...`);
+    if (blockNFTs && eligibleNfts.length > 0) {
+      console.log(`Bloqueando ${eligibleNfts.length} NFTs elegibles en paralelo...`);
       
       // Crear un array de promesas para bloquear todos los NFTs elegibles simultáneamente
-      const lockPromises = unlockedNfts.map(async (nft) => {
+      const lockPromises = eligibleNfts.map(async (nft) => {
         try {
           const lockResult = await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
           console.log(`NFT ${nft.contract_address}:${nft.token_id} ${lockResult ? 'bloqueado' : 'no se pudo bloquear'} para wallet ${walletAddress}`);
@@ -350,11 +349,12 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     return { 
       success: true, 
       totalPoints,
-      eligibleNfts // Return eligible NFTs to use in the registry
+      eligibleNfts, // Return eligible NFTs to use in the registry
+      nftStatusMap  // Return the status map for all NFTs
     };
   } catch (error) {
     console.error('Error calculating NFT points:', error);
-    return { success: false, error, totalPoints: 0, eligibleNfts: [] };
+    return { success: false, error, totalPoints: 0, eligibleNfts: [], nftStatusMap: {} };
   }
 }
 
