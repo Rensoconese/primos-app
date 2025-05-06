@@ -17,14 +17,10 @@ El proyecto utiliza varias variables de entorno que están definidas en `.env.lo
 ### Solución:
 En el panel de Vercel, ve a tu proyecto y configura las siguientes variables de entorno (usando los valores de tu archivo .env.local):
 
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-- SUPABASE_SERVICE_ROLE_KEY
-- REWARD_POOL_PRIVATE_KEY
-- MORALIS_API_KEY
-- MORALIS_NODE_API
-- RONIN_RPC_URL
-- RONIN_RPC_URL_BACKUP
+- Variables de entorno para Supabase
+- Variables de entorno para Blockchain
+- Variables de entorno para Moralis
+- Variables de entorno para RPC
 
 Para hacer esto en Vercel:
 1. Inicia sesión en tu cuenta de Vercel
