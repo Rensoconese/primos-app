@@ -101,18 +101,14 @@ const headers = {
   - Dirección: 0x23924869ff64ab205b3e3be388a373d75de74ebd
 
 ### Variables de Entorno Requeridas
-```
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+El proyecto requiere variables de entorno para funcionar correctamente. Estas deben configurarse en un archivo `.env.local` que **NO** debe incluirse en el control de versiones.
 
-# Blockchain
-REWARD_POOL_PRIVATE_KEY=
-RONIN_RPC_URL=
-RONIN_RPC_URL_BACKUP=
-MORALIS_API_KEY=
-```
+**Categorías de variables:**
+- Supabase: Para conexión a la base de datos
+- Blockchain: Para interacción con contratos y tokens
+- Redis (Upstash): Para sistema de bloqueo global de NFTs
+
+Consulta la documentación interna para los valores específicos de cada variable.
 
 ## Desafíos Conocidos
 
