@@ -32,6 +32,9 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Implementación de lazy loading para mejorar el rendimiento en la visualización de NFTs
 - Refinamiento del cálculo de bonificaciones basado en rareza y atributos
 - Implementación de bloqueo global de NFTs con Redis para prevenir uso múltiple
+- Implementación de verificación paralela de NFTs utilizando Promise.all() para mejorar significativamente el rendimiento (ver `memory-bank/parallel-nft-verification.md` para detalles)
+- Creación de endpoints de prueba para comparar rendimiento entre implementación secuencial y paralela
+- Eliminación de verificación duplicada de Redis en `NFTDisplay.tsx`, reduciendo a la mitad el número de llamadas a Redis y mejorando significativamente el tiempo de carga para usuarios con muchos NFTs
 
 ### Experiencia de Usuario
 - Mejora en la visualización de streaks y multiplicadores
@@ -80,7 +83,7 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 ### Problemas Conocidos
 1. **Inconsistencias en Tiempo UTC**: Ocasionalmente hay discrepancias en el cálculo del día UTC entre frontend y backend
 2. **Latencia en Transacciones**: Algunas transacciones blockchain pueden tardar más de lo esperado
-3. **Carga de NFTs**: El proceso de carga y sincronización de NFTs puede ser lento con colecciones grandes
+3. **Carga de NFTs**: El proceso de carga y sincronización de NFTs puede ser lento con colecciones grandes (parcialmente resuelto con verificación paralela y eliminación de verificaciones duplicadas de Redis)
 
 ### Consideraciones de Seguridad
 1. **Protección de Claves Privadas**: Asegurar que las claves privadas para distribución de tokens estén seguras
