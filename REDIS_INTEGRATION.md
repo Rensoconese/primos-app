@@ -13,8 +13,8 @@ La integración de Redis (Upstash) permite mejorar el rendimiento y la consisten
 Añade las siguientes variables de entorno en tu archivo `.env.local`:
 
 ```
-UPSTASH_REDIS_REST_URL=https://your-endpoint.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 ```
 
 Puedes obtener estos valores desde la consola de Upstash después de crear una base de datos Redis.

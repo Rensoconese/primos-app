@@ -1,4 +1,4 @@
-# Integración de Redis en Primos CheckIn
+ # Integración de Redis en Primos CheckIn
 
 ## Descripción General
 
@@ -205,10 +205,10 @@ Se han creado dos endpoints para facilitar la gestión de Redis:
 
 ```
 # Redis (Upstash)
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
-NEXT_PUBLIC_UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN=your-token
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+NEXT_PUBLIC_UPSTASH_REDIS_REST_URL=
+NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN=
 ```
 
 ## Consideraciones y Mejores Prácticas
