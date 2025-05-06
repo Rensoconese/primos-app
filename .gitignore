@@ -37,3 +37,5 @@ yarn-error.log*
 
 # Archivos de respaldo
 updated_*
+# Archivos con información sensible
+memory-bank/techContext.md
