@@ -30,6 +30,8 @@
 - ✅ **Sistema de Reintentos**: Mecanismo de retry con backoff exponencial
 - ✅ **Conexión RPC Robusta**: Sistema de fallback para conexiones blockchain
 - ✅ **Bloqueo Global de NFTs**: Prevención de uso múltiple de NFTs con Redis
+- ✅ **Verificación Paralela de NFTs**: Implementación de Promise.all() para verificar y bloquear NFTs en paralelo
+- ✅ **Eliminación de Verificación Duplicada**: Reducción de llamadas a Redis eliminando verificaciones redundantes
 
 ### Control de Versiones y Colaboración
 - ✅ **Repositorio GitHub**: Proyecto subido y configurado en GitHub
@@ -92,8 +94,11 @@ El proyecto se encuentra en fase de desarrollo activo, con las funcionalidades p
 ### Problemas de Rendimiento
 1. **Carga de NFTs**: Proceso lento con colecciones grandes
    - **Impacto**: Medio - Afecta la experiencia de usuario
-   - **Estado**: En progreso
-   - **Solución Propuesta**: Mejorar lazy loading y paginación
+   - **Estado**: Mayormente resuelto
+   - **Soluciones Implementadas**: 
+     - Verificación paralela de NFTs con Promise.all() (documentado en `memory-bank/parallel-nft-verification.md`)
+     - Eliminación de verificación duplicada de Redis en `NFTDisplay.tsx`
+   - **Solución Pendiente**: Mejorar lazy loading y paginación
 
 2. **Latencia en Transacciones**: Tiempos de espera variables en transacciones blockchain
    - **Impacto**: Bajo - Afecta la experiencia pero no la funcionalidad
