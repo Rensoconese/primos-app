@@ -2,6 +2,7 @@ import { supabase, updateLeaderboard } from '@/utils/supabase';
 import { ethers } from 'ethers';
 import { abi as ERC721ABI } from '@/utils/erc721-abi'; // You'll need to create this file with the ABI
 import { isNFTLocked, lockNFT } from './redisService';
+import { getNFTPointsSafe } from '@/data/nftPoints';
 
 // Primos NFT contract address
 export const PRIMOS_NFT_CONTRACT = '0x23924869ff64ab205b3e3be388a373d75de74ebd';
@@ -31,107 +32,120 @@ export interface NFT {
 
 /**
  * Synchronizes user NFTs between the blockchain and the database
- * Gets current NFTs from the blockchain, compares them with those in the database,
- * and removes those that are no longer in the user's wallet.
+ * Uses a compare-and-update strategy instead of delete-and-reinsert
  */
 export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, walletAddress: string) {
   try {
     console.log(`⚡ START: Fetching NFTs for wallet: ${walletAddress}`);
     
-    // STEP 1: VERIFY EXISTING NFTS IN DATABASE
-    const { data: existingNfts, error: existingError } = await supabase
-      .from('nfts')
-      .select('token_id, contract_address, rarity, bonus_points')
-      .eq('wallet_address', walletAddress.toLowerCase());
-    
-    if (existingError) {
-      console.error('Error checking existing NFTs:', existingError);
-    } else {
-      console.log(`🔍 EXISTING DB STATE: Found ${existingNfts?.length || 0} NFTs in database for wallet ${walletAddress.toLowerCase()}`);
-      if (existingNfts && existingNfts.length > 0) {
-        const totalBonusPoints = existingNfts.reduce((sum, nft) => sum + (nft.bonus_points || 0), 0);
-        console.log(`⚠️ DB STATE DETAILS: Total bonus points before cleanup: ${totalBonusPoints}`);
-        existingNfts.forEach(nft => {
-          console.log(`   - NFT #${nft.token_id}: ${nft.rarity || 'unknown'} (${nft.bonus_points || 0} points)`);
-        });
-      }
-    }
-    
-    // STEP 2: AGGRESSIVELY CLEAN ALL NFTS FOR THIS WALLET
-    console.log(`🧹 CLEANUP: Removing ALL existing NFTs for wallet ${walletAddress.toLowerCase()}...`);
-    
-    // First deletion pass
-    const { error: cleanError1 } = await supabase
-      .from('nfts')
-      .delete()
-      .eq('wallet_address', walletAddress.toLowerCase());
-    
-    if (cleanError1) {
-      console.error('❌ CLEANUP ERROR (first attempt):', cleanError1);
-      // Try to continue despite the error
-    }
-    
-    // Verify that the deletion was successful
-    const { data: remainingNfts, error: checkError } = await supabase
-      .from('nfts')
-      .select('count')
-      .eq('wallet_address', walletAddress.toLowerCase());
-    
-    if (checkError) {
-      console.error('Error verifying cleanup:', checkError);
-    } else {
-      const count = remainingNfts?.[0]?.count || 0;
-      console.log(`🔍 CLEANUP VERIFICATION: ${count} NFTs remain in database after cleanup`);
-      
-      // If NFTs still remain, try to delete them again
-      if (count > 0) {
-        console.log(`⚠️ WARNING: First cleanup incomplete, attempting second cleanup...`);
-        
-        // Second deletion pass to ensure complete cleanup
-        const { error: cleanError2 } = await supabase
-          .from('nfts')
-          .delete()
-          .eq('wallet_address', walletAddress.toLowerCase());
-        
-        if (cleanError2) {
-          console.error('❌ CLEANUP ERROR (second attempt):', cleanError2);
-        } else {
-          console.log(`✅ SECOND CLEANUP complete`);
-        }
-      }
-    }
-    
-    // Small pause to ensure deletion completes before continuing
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // STEP 3: GET FRESH NFTS FROM THE BLOCKCHAIN
+    // STEP 1: GET NFTS FROM BLOCKCHAIN
     const contract = new ethers.Contract(PRIMOS_NFT_CONTRACT, ERC721ABI, provider);
-    
-    // Get NFT balance
     const balance = await contract.balanceOf(walletAddress);
     const balanceNum = balance.toNumber();
     
     console.log(`Found ${balanceNum} NFTs in blockchain for wallet ${walletAddress}`);
     
-    // Prepare arrays to store the data
+    // Get all token IDs from blockchain
     const blockchainNFTIds: number[] = [];
-    const nfts = [];
-    
-    // Iterate over all NFTs and get their IDs
     for (let i = 0; i < balanceNum; i++) {
       const tokenId = await contract.tokenOfOwnerByIndex(walletAddress, i);
-      const tokenIdNum = tokenId.toNumber();
-      blockchainNFTIds.push(tokenIdNum);
+      blockchainNFTIds.push(tokenId.toNumber());
+    }
+    
+    // STEP 2: GET EXISTING NFTS FROM DATABASE
+    const { data: existingNfts, error: existingError } = await supabase
+      .from('nfts')
+      .select('token_id, contract_address, rarity, bonus_points, metadata, is_shiny, is_z, is_full_set')
+      .eq('wallet_address', walletAddress.toLowerCase());
+    
+    if (existingError) {
+      console.error('Error checking existing NFTs:', existingError);
+      // Continue despite error to try recovery
+    } else {
+      console.log(`🔍 EXISTING DB STATE: Found ${existingNfts?.length || 0} NFTs in database for wallet ${walletAddress.toLowerCase()}`);
+      if (existingNfts && existingNfts.length > 0) {
+        const totalBonusPoints = existingNfts.reduce((sum, nft) => sum + (nft.bonus_points || 0), 0);
+        console.log(`⚠️ DB STATE DETAILS: Total bonus points before sync: ${totalBonusPoints}`);
+      }
+    }
+    
+    // Create a map of existing NFTs for easy lookup
+    const existingNftsMap = new Map();
+    if (existingNfts) {
+      existingNfts.forEach(nft => {
+        existingNftsMap.set(Number(nft.token_id), nft);
+      });
+    }
+    
+    // STEP 3: IDENTIFY NFTS TO ADD, UPDATE, OR REMOVE
+    const nftsToAdd: number[] = [];
+    const nftsToUpdate: number[] = [];
+    const nftsToRemove: number[] = [];
+    
+    // Find NFTs to add or update
+    for (const tokenId of blockchainNFTIds) {
+      if (!existingNftsMap.has(tokenId)) {
+        nftsToAdd.push(tokenId);
+      } else {
+        // Only update if needed (e.g., if bonus points changed)
+        const existingNft = existingNftsMap.get(tokenId);
+        const currentPoints = getNFTPointsSafe(String(tokenId), 0);
+        
+        if (existingNft.bonus_points !== currentPoints) {
+          nftsToUpdate.push(tokenId);
+        }
+      }
+    }
+    
+    // Find NFTs to remove (in DB but not in blockchain)
+    if (existingNfts) {
+      for (const nft of existingNfts) {
+        const tokenId = Number(nft.token_id);
+        if (!blockchainNFTIds.includes(tokenId)) {
+          nftsToRemove.push(tokenId);
+        }
+      }
+    }
+    
+    console.log(`Sync plan: Add ${nftsToAdd.length}, Update ${nftsToUpdate.length}, Remove ${nftsToRemove.length} NFTs`);
+    
+    // STEP 4: PROCESS REMOVALS
+    if (nftsToRemove.length > 0) {
+      const { error: removeError } = await supabase
+        .from('nfts')
+        .delete()
+        .eq('wallet_address', walletAddress.toLowerCase())
+        .in('token_id', nftsToRemove);
       
-      // Try to get the token URI
-      const tokenURI = await contract.tokenURI(tokenId);
-      
-      // Get metadata (this depends on how your contract is implemented)
+      if (removeError) {
+        console.error('Error removing NFTs:', removeError);
+      } else {
+        console.log(`✅ Removed ${nftsToRemove.length} NFTs that are no longer in the wallet`);
+      }
+    }
+    
+    // STEP 5: PROCESS ADDITIONS AND UPDATES
+    const nftsToProcess = [...nftsToAdd, ...nftsToUpdate];
+    const processedNfts: Array<{
+      tokenId: number;
+      metadata?: NFTMetadata;
+      bonusPoints: number;
+      rarity: string;
+      isShiny: boolean;
+      isZ: boolean;
+      isFullSet: boolean;
+    }> = [];
+    
+    for (const tokenId of nftsToProcess) {
+      // Get token URI and metadata if needed
       let metadata: NFTMetadata | null = null;
+      let tokenURI = null;
       
-      if (tokenURI) {
-        try {
-          // If the URI is an IPFS or HTTPS link
+      try {
+        tokenURI = await contract.tokenURI(tokenId);
+        
+        // Only fetch metadata if this is a new NFT or we need to update
+        if (tokenURI) {
           if (tokenURI.startsWith('ipfs://')) {
             const ipfsHash = tokenURI.replace('ipfs://', '');
             const response = await fetch(`https://ipfs.io/ipfs/${ipfsHash}`);
@@ -140,77 +154,44 @@ export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, wal
             const response = await fetch(tokenURI);
             metadata = await response.json();
           }
-        } catch (err) {
-          console.error(`Error fetching metadata for token ${tokenIdNum}:`, err);
         }
+      } catch (err) {
+        console.error(`Error fetching metadata for token ${tokenId}:`, err);
       }
       
-      // Calculate bonus points based on metadata
-      let bonusPoints = 0;
+      // Get points from precalculated map
+      const bonusPoints = getNFTPointsSafe(String(tokenId), 0);
+      console.log(`Processing NFT #${tokenId} - Puntos: ${bonusPoints}`);
+      
+      // Extract basic info from metadata for storage
       let rarity = '';
       let isShiny = false;
       let isZ = false;
       let isFullSet = false;
       
-      console.log(`Processing metadata for NFT #${tokenIdNum}:`, metadata);
-      
       if (metadata?.attributes) {
-        console.log(`Attributes for NFT #${tokenIdNum}:`, metadata.attributes);
-        
-        // Determine rarity
         const rarityAttr = metadata.attributes.find(attr => attr.trait_type === 'Rarity');
         if (rarityAttr) {
           rarity = rarityAttr.value as string;
-          console.log(`Found rarity for NFT #${tokenIdNum}: "${rarity}"`);
-          
-          // Calculate bonus points based on rarity
-          if (rarity === 'unique') {
-            bonusPoints += 30;
-            console.log(`  → +30 points for unique rarity`);
-          }
-          else if (rarity === 'shiny Z') {
-            bonusPoints += 13;
-            isShiny = true;
-            isZ = true;
-            console.log(`  → +13 points for shiny Z rarity`);
-          }
-          else if (rarity === 'shiny') {
-            bonusPoints += 7;
-            isShiny = true;
-            console.log(`  → +7 points for shiny rarity`);
-          }
-          else if (rarity === 'original Z') {
-            bonusPoints += 4;
-            isZ = true;
-            console.log(`  → +4 points for original Z rarity`);
-          }
-          else if (rarity === 'original') {
-            bonusPoints += 1;
-            console.log(`  → +1 point for original rarity`);
-          }
-        } else {
-          console.log(`⚠️ No rarity attribute found for NFT #${tokenIdNum}`);
         }
         
-        // Check if it has full set
         const fullSetAttr = metadata.attributes.find(attr => attr.trait_type === 'Full Set');
         if (fullSetAttr && fullSetAttr.value === true) {
-          bonusPoints += 2;
           isFullSet = true;
-          console.log(`  → +2 points for Full Set attribute`);
         }
-      } else {
-        console.log(`⚠️ No attributes found in metadata for NFT #${tokenIdNum}`);
+        
+        if (rarity) {
+          isShiny = rarity.toLowerCase().includes('shiny');
+          isZ = rarity.toLowerCase().includes('z');
+        }
       }
       
-      console.log(`Final calculation for NFT #${tokenIdNum}: ${bonusPoints} bonus points (rarity: ${rarity}, shiny: ${isShiny}, Z: ${isZ}, fullSet: ${isFullSet})`);
-      
       // Save or update the NFT in the database
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('nfts')
         .upsert(
           {
-            token_id: tokenIdNum,
+            token_id: tokenId,
             wallet_address: walletAddress.toLowerCase(),
             contract_address: PRIMOS_NFT_CONTRACT.toLowerCase(),
             rarity,
@@ -224,33 +205,63 @@ export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, wal
           {
             onConflict: 'token_id,contract_address'
           }
-        )
-        .select();
+        );
       
-      if (error) throw error;
-      
-      nfts.push({
-        tokenId: tokenIdNum,
-        metadata,
-        bonusPoints,
-        rarity,
-        isShiny,
-        isZ,
-        isFullSet
-      });
+      if (error) {
+        console.error(`Error saving NFT ${tokenId}:`, error);
+      } else {
+        processedNfts.push({
+          tokenId,
+          metadata: metadata || undefined,
+          bonusPoints,
+          rarity,
+          isShiny,
+          isZ,
+          isFullSet
+        });
+      }
     }
     
-    // Now we will insert (or reinsert) all current NFTs from the blockchain
-    console.log(`Adding/updating ${blockchainNFTIds.length} current NFTs from blockchain to database`);
+    // STEP 6: PREPARE RETURN DATA
+    // If we processed any NFTs, return those. Otherwise, return existing NFTs
+    let returnNfts: Array<{
+      tokenId: number;
+      metadata?: NFTMetadata;
+      bonusPoints: number;
+      rarity?: string;
+      isShiny?: boolean;
+      isZ?: boolean;
+      isFullSet?: boolean;
+    }> = [];
     
+    if (processedNfts.length > 0) {
+      returnNfts = processedNfts;
+    } else if (existingNfts) {
+      // Convert existing NFTs to the expected format
+      returnNfts = existingNfts.map(nft => ({
+        tokenId: Number(nft.token_id),
+        metadata: nft.metadata,
+        bonusPoints: nft.bonus_points || 0,
+        rarity: nft.rarity,
+        isShiny: nft.is_shiny || false,
+        isZ: nft.is_z || false,
+        isFullSet: nft.is_full_set || false
+      }));
+    }
+    
+    // STEP 7: UPDATE LEADERBOARD
     try {
-      const totalBonusPoints = nfts.reduce((sum, nft) => sum + nft.bonusPoints, 0);
-      await updateLeaderboardNFTData(walletAddress, nfts.length, totalBonusPoints);
+      // Calculate total bonus points from all NFTs
+      const totalBonusPoints = blockchainNFTIds.reduce((sum, tokenId) => {
+        return sum + getNFTPointsSafe(String(tokenId), 0);
+      }, 0);
+      
+      await updateLeaderboardNFTData(walletAddress, blockchainNFTIds.length, totalBonusPoints);
     } catch (error) {
       console.error('Error updating leaderboard NFT data:', error);
     }
     
-    return { success: true, nfts };
+    return { success: true, nfts: returnNfts };
   } catch (error) {
     console.error('Error fetching NFTs:', error);
     return { success: false, error };
@@ -313,8 +324,20 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
       
       // Si no está bloqueado, añadir a elegibles
       if (!result.isLocked) {
-        eligibleNfts.push(result.nft);
-        totalPoints += (result.nft.bonus_points || 0);
+        // Obtener puntos del mapa precalculado
+        const tokenId = String(result.nft.token_id);
+        const bonusPoints = getNFTPointsSafe(tokenId, result.nft.bonus_points || 0);
+        
+        // Actualizar los puntos en el objeto NFT
+        const nftWithUpdatedPoints = {
+          ...result.nft,
+          bonus_points: bonusPoints
+        };
+        
+        eligibleNfts.push(nftWithUpdatedPoints);
+        totalPoints += bonusPoints;
+        
+        console.log(`NFT ${result.nft.contract_address}:${tokenId} disponible con ${bonusPoints} puntos`);
       } else {
         console.log(`NFT ${result.nft.contract_address}:${result.nft.token_id} ya está bloqueado, no disponible para wallet ${walletAddress}`);
       }
@@ -355,6 +378,69 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
   } catch (error) {
     console.error('Error calculating NFT points:', error);
     return { success: false, error, totalPoints: 0, eligibleNfts: [], nftStatusMap: {} };
+  }
+}
+
+/**
+ * Bloquea NFTs específicos sin recalcular puntos
+ * Esta función es más eficiente cuando ya conocemos los NFTs que queremos bloquear
+ */
+export async function blockSpecificNFTs(walletAddress: string, nftIds: string[]) {
+  try {
+    console.log(`Bloqueando ${nftIds.length} NFTs específicos para wallet ${walletAddress}`);
+    const startTime = Date.now();
+    
+    if (!nftIds || nftIds.length === 0) {
+      console.log('No se proporcionaron NFTs para bloquear');
+      return { success: true, blockedCount: 0 };
+    }
+    
+    // Obtener los NFTs específicos de la base de datos
+    const { data: nfts, error } = await supabase
+      .from('nfts')
+      .select('token_id, contract_address')
+      .eq('wallet_address', walletAddress.toLowerCase())
+      .in('token_id', nftIds);
+    
+    if (error) throw error;
+    
+    console.log(`Encontrados ${nfts?.length || 0} NFTs en la base de datos para bloquear`);
+    
+    if (!nfts || nfts.length === 0) {
+      return { success: true, blockedCount: 0 };
+    }
+    
+    // Bloquear los NFTs en paralelo
+    const lockPromises = nfts.map(async (nft) => {
+      try {
+        const lockResult = await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
+        console.log(`NFT ${nft.contract_address}:${nft.token_id} ${lockResult ? 'bloqueado' : 'no se pudo bloquear'} para wallet ${walletAddress}`);
+        return { nft, success: lockResult };
+      } catch (err) {
+        console.error(`Error bloqueando NFT ${nft.contract_address}:${nft.token_id}:`, err);
+        return { nft, success: false };
+      }
+    });
+    
+    // Esperar a que todos los bloqueos se completen
+    const results = await Promise.all(lockPromises);
+    
+    // Contar cuántos NFTs se bloquearon exitosamente
+    const blockedCount = results.filter(result => result.success).length;
+    
+    const endTime = Date.now();
+    const executionTime = (endTime - startTime) / 1000;
+    
+    console.log(`Se bloquearon ${blockedCount} NFTs de ${nfts.length}`);
+    console.log(`Tiempo de ejecución: ${executionTime.toFixed(2)} segundos`);
+    
+    return { 
+      success: true, 
+      blockedCount
+    };
+  } catch (error) {
+    console.error('Error bloqueando NFTs específicos:', error);
+    return { success: false, error, blockedCount: 0 };
   }
 }
 

@@ -32,8 +32,8 @@
 - ✅ **Bloqueo Global de NFTs**: Prevención de uso múltiple de NFTs con Redis
 - ✅ **Verificación Paralela de NFTs**: Implementación de Promise.all() para verificar y bloquear NFTs en paralelo
 - ✅ **Eliminación de Verificación Duplicada**: Reducción de llamadas a Redis eliminando verificaciones redundantes
-- ✅ **Solución de Bucle Infinito**: Eliminación del bucle infinito de recálculos al reclamar tokens
-- ✅ **Mejora de UX**: Eliminación de mensaje duplicado de streak roto
+- ✅ **Mapa Precalculado de Puntos NFT**: Implementación de archivo con puntos precalculados para eliminar cálculos redundantes
+- ✅ **Estrategia "Comparar y Actualizar"**: Reemplazo de "eliminar y reinsertar" por una estrategia más eficiente en la sincronización de NFTs
 
 ### Control de Versiones y Colaboración
 - ✅ **Repositorio GitHub**: Proyecto subido y configurado en GitHub
@@ -59,6 +59,9 @@
 - ❌ **Optimización de Imágenes**: Mejora en la carga y visualización de imágenes de NFTs
 - ❌ **Pruebas Automatizadas**: Implementación de tests unitarios e integración
 - ❌ **Monitoreo y Logging**: Sistema avanzado de monitoreo y registro de errores
+- ❌ **Sistema de Niveles de Log**: Implementación de niveles (DEBUG, INFO, WARN, ERROR) para reducir logs innecesarios
+- ❌ **Caché de Metadatos**: Almacenamiento en caché de metadatos de NFTs para reducir consultas a IPFS/HTTP
+- ❌ **Optimización de Verificaciones Redis**: Implementación de caché en memoria para resultados de verificaciones
 
 ## Estado Actual del Proyecto
 
@@ -68,10 +71,10 @@ El proyecto se encuentra en fase de desarrollo activo, con las funcionalidades p
 ### Métricas de Progreso
 - **Funcionalidades Principales**: 90% completadas
 - **Componentes de UI**: 85% completados
-- **Backend y Datos**: 80% completados
-- **Optimizaciones**: 60% completadas
+- **Backend y Datos**: 85% completados
+- **Optimizaciones**: 70% completadas
 - **Pruebas**: 40% completadas
-- **Documentación**: 65% completada
+- **Documentación**: 70% completada
 - **Control de Versiones**: 100% completado
 
 ### Estado de Despliegue
@@ -100,6 +103,8 @@ El proyecto se encuentra en fase de desarrollo activo, con las funcionalidades p
    - **Soluciones Implementadas**: 
      - Verificación paralela de NFTs con Promise.all() (documentado en `memory-bank/parallel-nft-verification.md`)
      - Eliminación de verificación duplicada de Redis en `NFTDisplay.tsx`
+     - Implementación de mapa precalculado de puntos NFT para eliminar cálculos redundantes
+     - Reemplazo de estrategia "eliminar y reinsertar" por "comparar y actualizar" en la sincronización de NFTs
    - **Solución Pendiente**: Mejorar lazy loading y paginación
 
 2. **Latencia en Transacciones**: Tiempos de espera variables en transacciones blockchain

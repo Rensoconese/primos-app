@@ -35,6 +35,8 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Implementación de verificación paralela de NFTs utilizando Promise.all() para mejorar significativamente el rendimiento (ver `memory-bank/parallel-nft-verification.md` para detalles)
 - Creación de endpoints de prueba para comparar rendimiento entre implementación secuencial y paralela
 - Eliminación de verificación duplicada de Redis en `NFTDisplay.tsx`, reduciendo a la mitad el número de llamadas a Redis y mejorando significativamente el tiempo de carga para usuarios con muchos NFTs
+- Implementación de mapa precalculado de puntos NFT en `src/data/nftPoints.ts` para eliminar el cálculo redundante basado en metadatos
+- Reemplazo de la estrategia "eliminar y reinsertar" por una estrategia "comparar y actualizar" en `fetchUserNFTs`, reduciendo significativamente las operaciones de base de datos
 
 ### Experiencia de Usuario
 - Mejora en la visualización de streaks y multiplicadores
