@@ -24,49 +24,24 @@ export interface LeaderboardData {
  */
 export const updateLeaderboard = async (walletAddress: string, updates: Partial<LeaderboardData>) => {
   try {
-    // 1. First get existing leaderboard entry data
-    const { data: existingData, error: fetchError } = await supabase
-      .from('leaderboard')
-      .select('*')
-      .eq('wallet_address', walletAddress.toLowerCase())
-      .single();
+    // Usar la API en lugar de actualizar directamente desde el cliente
+    const response = await fetch('/api/update-leaderboard', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        wallet_address: walletAddress,
+        updates
+      }),
+    });
     
-    // 2. Prepare data for update, ensuring wallet_address is lowercase
-    const leaderboardData: LeaderboardData = {
-      wallet_address: walletAddress.toLowerCase(),
-      ...updates,
-      updated_at: new Date().toISOString() // Always update timestamp
-    };
-    
-    // 3. If existing data, preserve fields not included in the update
-    if (existingData && !fetchError) {
-      // For each field in existing data, if it's not in updates, preserve it
-      if (existingData.tokens_claimed !== undefined && updates.tokens_claimed === undefined) 
-        leaderboardData.tokens_claimed = existingData.tokens_claimed;
-      
-      if (existingData.best_streak !== undefined && updates.best_streak === undefined) 
-        leaderboardData.best_streak = existingData.best_streak;
-      
-      if (existingData.current_streak !== undefined && updates.current_streak === undefined) 
-        leaderboardData.current_streak = existingData.current_streak;
-      
-      if (existingData.nft_count !== undefined && updates.nft_count === undefined) 
-        leaderboardData.nft_count = existingData.nft_count;
-      
-      if (existingData.points_earned !== undefined && updates.points_earned === undefined) 
-        leaderboardData.points_earned = existingData.points_earned;
-      
-      if (existingData.user_name !== undefined && updates.user_name === undefined) 
-        leaderboardData.user_name = existingData.user_name;
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to update leaderboard');
     }
     
-    // 4. Update leaderboard with combined data
-    const { data, error } = await supabase
-      .from('leaderboard')
-      .upsert(leaderboardData, { onConflict: 'wallet_address' });
-    
-    if (error) throw error;
-    
+    const data = await response.json();
     return { success: true, data };
   } catch (error) {
     console.error('Error updating leaderboard:', error);
