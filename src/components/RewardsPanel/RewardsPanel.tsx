@@ -78,37 +78,7 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
     fetchTokenBalance();
   }, [userAddress, provider]);
   
-  // Actualizar el leaderboard con los tokens reclamados
-  const updateLeaderboardTokensClaimed = async (walletAddress: string, tokensReceived: number) => {
-    try {
-      // Obtener total de tokens reclamados
-      const { data } = await supabase
-        .from('rewards')
-        .select('tokens_received')
-        .eq('wallet_address', walletAddress.toLowerCase());
-      
-      const totalClaimed = data 
-        ? data.reduce((total, reward) => total + (reward.tokens_received || 0), 0) + tokensReceived
-        : tokensReceived;
-      
-      await supabase
-        .from('leaderboard')
-        .upsert(
-          {
-            wallet_address: walletAddress.toLowerCase(),
-            tokens_claimed: totalClaimed,
-            points_earned: totalPoints,
-            last_active: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          {
-            onConflict: 'wallet_address'
-          }
-        );
-    } catch (err) {
-      console.error('Error updating leaderboard:', err);
-    }
-  };
+  // La actualización del leaderboard ahora se realiza en el endpoint /api/claim-tokens
   
   // Función para realizar peticiones con reintento y manejo de errores de red
   const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {

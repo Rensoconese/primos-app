@@ -84,6 +84,11 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 - Mejora en la sincronización entre blockchain y base de datos
 - Implementación de mecanismo de fallback para reclamaciones de tokens
 - Migración del sistema de bloqueo de NFTs de Supabase a Redis
+- Mejora de la seguridad en Supabase:
+  - Habilitación de Row Level Security (RLS) en todas las tablas
+  - Creación de políticas de seguridad específicas para cada tabla
+  - Centralización de actualizaciones del leaderboard a través del servicio leaderboardService
+  - Eliminación de actualizaciones directas a la base de datos desde el cliente
 
 ## Próximos Pasos
 
