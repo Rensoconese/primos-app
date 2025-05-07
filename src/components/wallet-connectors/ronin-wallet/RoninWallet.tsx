@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createWalletClient, custom } from 'viem';
 import { ethers } from 'ethers'; // Para compatibilidad con componentes existentes
-import { useConnectorStoreViem } from '@/hooks/useConnectorStoreViem';
+import { useConnectorStore } from '@/hooks/useConnectorStore';
 
 // Definición de la cadena Ronin
 const ronin = {
@@ -49,7 +49,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
     setChainId, 
     client, 
     setClient 
-  } = useConnectorStoreViem();
+  } = useConnectorStore();
   
   const [connecting, setConnecting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
