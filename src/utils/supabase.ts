@@ -12,7 +12,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'apikey': supabaseAnonKey
+      'apikey': supabaseAnonKey,
+      'Prefer': 'return=representation'
     }
   }
 });
