@@ -34,6 +34,9 @@
 - ✅ **Eliminación de Verificación Duplicada**: Reducción de llamadas a Redis eliminando verificaciones redundantes
 - ✅ **Mapa Precalculado de Puntos NFT**: Implementación de archivo con puntos precalculados para eliminar cálculos redundantes
 - ✅ **Estrategia "Comparar y Actualizar"**: Reemplazo de "eliminar y reinsertar" por una estrategia más eficiente en la sincronización de NFTs
+- ✅ **Actualización a Next.js 15 y React 19**: Mejora de rendimiento y funcionalidades con las últimas versiones
+- ✅ **Mejora de UX en Mensajes de Error**: Implementación de mensajes amigables para errores comunes
+- ✅ **Optimización de Animaciones**: Corrección y mejora de animaciones durante el check-in
 - ✅ **Migración a viem**: Reemplazo de ethers.js por viem para mejor rendimiento, tipado y manejo de errores
   - Migración completa de `contract-types.ts` para usar tipos y funciones de viem
   - Actualización de `contract.ts` para usar viem con capa de compatibilidad para código existente

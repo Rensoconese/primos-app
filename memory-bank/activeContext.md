@@ -10,6 +10,18 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 
 ## Cambios Recientes
 
+### Actualización de Next.js y React
+- Actualización de Next.js de 14.2.25 a 15.3.2
+- Actualización de React y React DOM de 18.2.0 a 19.1.0
+- Actualización de los tipos de React y React DOM a 19.1.3
+- Adaptación del archivo next.config.js para Next.js 15:
+  - Movimiento de `serverComponentsExternalPackages` a `serverExternalPackages`
+  - Eliminación de `swcMinify` que ya no es reconocido
+- Mejora en la experiencia de usuario:
+  - Implementación de mensaje amigable cuando el usuario rechaza la transacción
+  - Corrección de la animación durante el check-in para usar `bucle_o.webm`
+  - Optimización del tamaño del video y mensajes para ocupar todo el ancho disponible
+
 ### Migración de ethers.js a viem
 - Migración completa de ethers.js a viem para interacciones blockchain
 - Actualización de componentes clave como `RoninWallet.tsx` y `useConnectorStore.ts`

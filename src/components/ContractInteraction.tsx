@@ -714,7 +714,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         
         // Success message is already set in the API response handler
       } catch (txErr: any) {
-        // Improved error logging with detailed error information
+          // Improved error logging with detailed error information
         console.error('Transaction error:', {
           message: txErr.message,
           code: txErr.code,
@@ -730,7 +730,10 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         });
         
         // Check for specific error messages
-        if (txErr.code === 'CALL_EXCEPTION' || txErr.code === 'UNPREDICTABLE_GAS_LIMIT') {
+        if (txErr.message?.includes('User rejected the request')) {
+          // Mensaje amigable cuando el usuario rechaza la transacción
+          setError('Transaction cancelled. You cancelled the check-in request.');
+        } else if (txErr.code === 'CALL_EXCEPTION' || txErr.code === 'UNPREDICTABLE_GAS_LIMIT') {
           if (txErr.error?.message === 'Failed to fetch') {
             setError('Network error: Unable to connect to the blockchain. Please check your network connection and try again.');
           } else if (txErr.error?.message?.includes('missing revert data') || txErr.error?.message?.includes('execution reverted')) {
@@ -827,9 +830,9 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         
         {/* Show animation when checking in */}
         {showAnimation && (
-          <div className="mt-4 relative">
-            <video autoPlay loop muted className="w-64 h-64">
-              <source src="/videos/fire-dust.webm" type="video/webm" />
+          <div className="mt-4 relative w-full">
+            <video autoPlay loop muted className="w-full max-w-full">
+              <source src="/videos/bucle_o.webm" type="video/webm" />
               Your browser does not support the video tag.
             </video>
           </div>
@@ -837,14 +840,14 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         
         {/* Error message */}
         {error && (
-          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md">
+          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md w-full">
             {error}
           </div>
         )}
         
         {/* Success message */}
         {success && (
-          <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">
+          <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md w-full">
             {success}
           </div>
         )}

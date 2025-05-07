@@ -38,14 +38,13 @@ const nextConfig = {
     pagesBufferLength: 2,
   },
 
-  // Configuración adicional para optimización
-  swcMinify: true, // Usar SWC para minificación (más rápido que Terser)
+  // Configuración para componentes del servidor
+  serverExternalPackages: [], // Movido desde experimental.serverComponentsExternalPackages
   
   // Configuración experimental para el proyecto
   experimental: {
     // Usar estas opciones sólo si son necesarias para tu proyecto
     // Si causan problemas, comentarlas
-    serverComponentsExternalPackages: []
   },
 };
 
