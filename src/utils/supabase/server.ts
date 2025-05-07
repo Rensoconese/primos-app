@@ -5,9 +5,14 @@ import { type CookieOptions } from '@supabase/ssr'
 export async function createClient() {
   const cookieStore = await cookies()
 
+  // Usar la clave de servicio en el servidor para tener permisos completos
+  // Si no está disponible, usar la clave anónima como fallback
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         get(name: string) {

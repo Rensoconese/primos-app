@@ -24,62 +24,29 @@ const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => 
   const [userEntry, setUserEntry] = useState<LeaderboardEntry | null>(null);
   const { account } = useConnectorStore();
   
-  // Función para obtener datos del leaderboard
+  // Función para obtener datos del leaderboard usando el endpoint de API
   const fetchLeaderboard = async () => {
     setLoading(true);
     try {
-      // Fetch top 10 for the leaderboard
-      const { data, error } = await supabase
-        .from('leaderboard')
-        .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
-        .order('tokens_claimed', { ascending: false })
-        .limit(10);
-        
-      if (error) throw error;
-      setLeaderboardData(data || []);
-
-      // If user is connected, fetch their data and rank
+      // Construir la URL con el parámetro wallet_address si el usuario está conectado
+      let url = '/api/get-leaderboard';
       if (account) {
-        // First check if the user is already in top 10
-        const userInTop10 = data?.find(entry => 
-          entry.wallet_address.toLowerCase() === account.toLowerCase()
-        );
-
-        if (!userInTop10) {
-          // Get the user's entry
-          const { data: userData, error: userError } = await supabase
-            .from('leaderboard')
-            .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
-            .eq('wallet_address', account)
-            .single();
-          
-          if (userError && userError.code !== 'PGRST116') {
-            // PGRST116 is the error code for no rows returned
-            console.error('Error fetching user data:', userError);
-          }
-
-          if (userData) {
-            // Get the user rank
-            const { count, error: countError } = await supabase
-              .from('leaderboard')
-              .select('wallet_address', { count: 'exact', head: true })
-              .gte('tokens_claimed', userData.tokens_claimed);
-            
-            if (countError) {
-              console.error('Error getting user rank:', countError);
-            }
-
-            const userWithRank = {
-              ...userData,
-              rank: count || 0
-            };
-            
-            setUserEntry(userWithRank);
-          }
-        }
-      } else {
-        setUserEntry(null);
+        url += `?wallet_address=${account.toLowerCase()}`;
       }
+      
+      // Realizar la petición al endpoint
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch leaderboard');
+      }
+      
+      const result = await response.json();
+      
+      // Actualizar el estado con los datos recibidos
+      setLeaderboardData(result.data || []);
+      setUserEntry(result.userEntry);
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
     } finally {
