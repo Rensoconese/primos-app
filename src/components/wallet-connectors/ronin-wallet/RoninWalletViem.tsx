@@ -268,7 +268,7 @@ const RoninWalletViem: React.FC<RoninWalletViemProps> = ({ onConnect, onDisconne
       ) : (
         <div className="flex flex-row items-center justify-between gap-3">
           <div className="text-sm font-medium px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded border border-gray-200 dark:border-gray-600">
-            {account ? `${account.substring(0, 6)}...${account.substring(account.length - 4)}` : 'Unknown'}
+            {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : 'Unknown'}
           </div>
           <button
             onClick={disconnectWallet}
