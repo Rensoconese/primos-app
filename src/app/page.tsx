@@ -17,6 +17,7 @@ export default function Home() {
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [userDataRefresh, setUserDataRefresh] = useState<number>(0);
+  const [rewardsRefresh, setRewardsRefresh] = useState<number>(0);
   const [nftCalculationInProgress, setNftCalculationInProgress] = useState<boolean>(false);
   // Removed state for passing functions between components
 
@@ -98,11 +99,11 @@ export default function Home() {
   };
   
   // Función separada para actualizar datos después de reclamar tokens
-  // Esta no actualiza el refreshTrigger para evitar recargar NFTDisplay
+  // Ahora actualiza rewardsRefresh en lugar de userDataRefresh para evitar recargar NFTDisplay
   const handleRewardClaimed = useCallback(() => {
-    // Solo actualizar el total de puntos sin afectar al componente NFTDisplay
+    // Actualizar el total de puntos y el leaderboard
     if (userAddress) {
-      // Actualizar solo los datos de puntos
+      // Actualizar los datos de puntos
       const loadUserPoints = async () => {
         try {
           const response = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
@@ -119,6 +120,9 @@ export default function Home() {
       };
       
       loadUserPoints();
+      
+      // Actualizar rewardsRefresh para que se actualice el leaderboard sin recargar NFTDisplay
+      setRewardsRefresh(prev => prev + 1);
     }
   }, [userAddress]);
   
@@ -205,9 +209,9 @@ export default function Home() {
                   />
                 </div>
                 
-                {/* Nuevo componente de leaderboard */}
+                {/* Componente de leaderboard con rewardsRefresh */}
                 <div className="md:col-span-3 mt-6">
-                  <LeaderboardDisplay />
+                  <LeaderboardDisplay refreshTrigger={rewardsRefresh} />
                 </div>
               </div>
             ) : (
