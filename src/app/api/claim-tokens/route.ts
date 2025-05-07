@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createDirectWallet, getBlockNumberDirect, callRpcDirectly } from '@/utils/direct-rpc';
 import { logDetailedError } from '@/utils/retry-utils';
-import { updateLeaderboard } from '@/utils/supabase';
 
 // Configuración
 const TOKEN_CONTRACT_ADDRESS = '0xE3a334D6b7681D0151b81964CAf6353905e24B1b'; // Fire Dust
@@ -401,16 +400,6 @@ export async function POST(request: Request) {
       
       // Obtener el total de tokens reclamados por el usuario
       const totalTokensClaimed = await getUserTotalClaimedTokens(walletAddress, supabase);
-      
-      // Usar la función centralizada para actualizar el leaderboard
-      const { success, error: leaderboardError } = await updateLeaderboard(walletAddress, {
-        tokens_claimed: totalTokensClaimed,
-        last_active: new Date().toISOString()
-      });
-      
-      if (!success || leaderboardError) {
-        console.error('Error al actualizar leaderboard:', leaderboardError);
-      }
       
       console.log('Proceso de reclamación completado con éxito');
       return NextResponse.json({

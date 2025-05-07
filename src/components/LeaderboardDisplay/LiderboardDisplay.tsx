@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
 import { useConnectorStore } from '@/hooks/useConnectorStore';
 
+interface LeaderboardDisplayProps {
+  refreshTrigger?: number;
+}
+
 interface LeaderboardEntry {
   wallet_address: string;
   user_name: string | null;
@@ -14,81 +18,80 @@ interface LeaderboardEntry {
   rank?: number;
 }
 
-const LeaderboardDisplay = () => {
+const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [userEntry, setUserEntry] = useState<LeaderboardEntry | null>(null);
   const { account } = useConnectorStore();
   
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      setLoading(true);
-      try {
-        // Fetch top 10 for the leaderboard
-        const { data, error } = await supabase
-          .from('leaderboard')
-          .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
-          .order('tokens_claimed', { ascending: false })
-          .limit(10);
+  // Función para obtener datos del leaderboard
+  const fetchLeaderboard = async () => {
+    setLoading(true);
+    try {
+      // Fetch top 10 for the leaderboard
+      const { data, error } = await supabase
+        .from('leaderboard')
+        .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
+        .order('tokens_claimed', { ascending: false })
+        .limit(10);
+        
+      if (error) throw error;
+      setLeaderboardData(data || []);
+
+      // If user is connected, fetch their data and rank
+      if (account) {
+        // First check if the user is already in top 10
+        const userInTop10 = data?.find(entry => 
+          entry.wallet_address.toLowerCase() === account.toLowerCase()
+        );
+
+        if (!userInTop10) {
+          // Get the user's entry
+          const { data: userData, error: userError } = await supabase
+            .from('leaderboard')
+            .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
+            .eq('wallet_address', account)
+            .single();
           
-        if (error) throw error;
-        setLeaderboardData(data || []);
-
-        // If user is connected, fetch their data and rank
-        if (account) {
-          // First check if the user is already in top 10
-          const userInTop10 = data?.find(entry => 
-            entry.wallet_address.toLowerCase() === account.toLowerCase()
-          );
-
-          if (!userInTop10) {
-            // Get the user's entry
-            const { data: userData, error: userError } = await supabase
-              .from('leaderboard')
-              .select('wallet_address, user_name, tokens_claimed, points_earned, best_streak, nft_count')
-              .eq('wallet_address', account)
-              .single();
-            
-            if (userError && userError.code !== 'PGRST116') {
-              // PGRST116 is the error code for no rows returned
-              console.error('Error fetching user data:', userError);
-            }
-
-            if (userData) {
-              // Get the user rank
-              const { count, error: countError } = await supabase
-                .from('leaderboard')
-                .select('wallet_address', { count: 'exact', head: true })
-                .gte('tokens_claimed', userData.tokens_claimed);
-              
-              if (countError) {
-                console.error('Error getting user rank:', countError);
-              }
-
-              const userWithRank = {
-                ...userData,
-                rank: count || 0
-              };
-              
-              setUserEntry(userWithRank);
-            }
+          if (userError && userError.code !== 'PGRST116') {
+            // PGRST116 is the error code for no rows returned
+            console.error('Error fetching user data:', userError);
           }
-        } else {
-          setUserEntry(null);
+
+          if (userData) {
+            // Get the user rank
+            const { count, error: countError } = await supabase
+              .from('leaderboard')
+              .select('wallet_address', { count: 'exact', head: true })
+              .gte('tokens_claimed', userData.tokens_claimed);
+            
+            if (countError) {
+              console.error('Error getting user rank:', countError);
+            }
+
+            const userWithRank = {
+              ...userData,
+              rank: count || 0
+            };
+            
+            setUserEntry(userWithRank);
+          }
         }
-      } catch (err) {
-        console.error('Error fetching leaderboard:', err);
-      } finally {
-        setLoading(false);
+      } else {
+        setUserEntry(null);
       }
-    };
-    
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Efecto para cargar datos cuando cambia account o refreshTrigger
+  useEffect(() => {
     fetchLeaderboard();
-    
-    // Update every minute
-    const interval = setInterval(fetchLeaderboard, 60000);
-    return () => clearInterval(interval);
-  }, [account]); // Re-run when account changes
+    // Ya no actualizamos cada minuto, solo cuando cambia refreshTrigger o account
+  }, [account, refreshTrigger]); // Re-run when account or refreshTrigger changes
   
   // Helper function to render a table row
   const renderTableRow = (entry: LeaderboardEntry, index: number, isCurrentUser: boolean = false) => {

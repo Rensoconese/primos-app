@@ -1,4 +1,5 @@
-import { supabase, updateLeaderboard } from '@/utils/supabase';
+import { supabase } from '@/utils/supabase';
+import { updateLeaderboard } from '@/services/leaderboardService';
 import { ethers } from 'ethers';
 import { abi as ERC721ABI } from '@/utils/erc721-abi'; // You'll need to create this file with the ABI
 import { isNFTLocked, lockNFT } from './redisService';

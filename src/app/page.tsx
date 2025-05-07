@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import ContractInteraction from '@/components/ContractInteraction';
-import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet';
+import RoninWalletViem from '@/components/wallet-connectors/ronin-wallet/RoninWalletViem';
 import NFTDisplay from '@/components/NFTDisplay/NFTDisplay';
 import RewardsPanel from '@/components/RewardsPanel/RewardsPanel';
 import LeaderboardDisplay from '@/components/LeaderboardDisplay/LiderboardDisplay';
@@ -174,7 +174,7 @@ export default function Home() {
               </div>
             </div>
             <div className="w-auto">
-              <RoninWallet onConnect={handleConnect} onDisconnect={handleDisconnect} />
+              <RoninWalletViem onConnect={handleConnect} onDisconnect={handleDisconnect} />
             </div>
           </div>
         </header>

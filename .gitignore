@@ -39,3 +39,9 @@ yarn-error.log*
 updated_*
 # Archivos con información sensible
 /memory-bank/
+.clinerules
+
+# Scripts de generación de NFT Points (solo desarrollo)
+script-generate-nft-points-map.ts
+generate-nft-points.js
+NFT_POINTS_MAP.md
