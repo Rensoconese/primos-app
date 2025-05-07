@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { getContract, retry, safeNumberFromBN, safeStringFromBN, directContractCall, RONIN_CHAIN_IDS } from '@/utils/contract';
-import { createClient } from '@/utils/supabase/client';
 import { getSecondsUntilNextUTCMidnight, formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
+import { updateLeaderboardStreak } from '@/services/leaderboardService';
 
 interface ContractInteractionProps {
   provider: ethers.providers.Web3Provider | null;
@@ -18,51 +18,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
   const [streak, setStreak] = useState<number>(0);
   const [nextCheckInTime, setNextCheckInTime] = useState<string>('');
   const [streakBroken, setStreakBroken] = useState<boolean>(false);
-  // Añade esta función
-  const updateLeaderboardStreak = async (walletAddress: string, currentStreak: number) => {
-    try {
-      const supabase = createClient();
-      
-      // Primero obtener los datos existentes del leaderboard
-      const { data: existingData, error: fetchError } = await supabase
-        .from('leaderboard')
-        .select('*')
-        .eq('wallet_address', walletAddress.toLowerCase())
-        .single();
-      
-      // Preparar datos para actualizar
-      const leaderboardData: any = {
-        wallet_address: walletAddress.toLowerCase(),
-        current_streak: currentStreak,
-        best_streak: currentStreak, // Actualizar best streak con el valor actual
-        last_active: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      // Si ya existía un registro, preservar los campos que no estamos actualizando
-      if (existingData && !fetchError) {
-        // Si el best_streak existente es mayor que el current_streak, mantenerlo
-        if (existingData.best_streak !== undefined && existingData.best_streak > currentStreak) {
-          leaderboardData.best_streak = existingData.best_streak;
-        }
-        
-        // Preservamos los campos que no estamos actualizando explícitamente
-        if (existingData.tokens_claimed !== undefined) 
-          leaderboardData.tokens_claimed = existingData.tokens_claimed;
-        
-        if (existingData.nft_count !== undefined) 
-          leaderboardData.nft_count = existingData.nft_count;
-      }
-      
-      // Actualizar leaderboard con todos los datos
-      await supabase
-        .from('leaderboard')
-        .upsert(leaderboardData, { onConflict: 'wallet_address' });
-        
-    } catch (err) {
-      console.error('Error updating leaderboard streak:', err);
-    }
-  };
   const [contractOwner, setContractOwner] = useState<string | null>(null);
   const [lastCheckIn, setLastCheckIn] = useState<string>('Never');
   const [hasCheckedIn, setHasCheckedIn] = useState<boolean>(false);
@@ -292,14 +247,23 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
                       if (isMounted) setStreakBroken(false);
                     }
                     
+                    // Log the can_checkin value for debugging
+                    console.log("Can check-in value from API:", userData.data.can_checkin);
+                    console.log("Hours remaining:", userData.data.hours_remaining);
+                    console.log("Checked in today UTC:", userData.data.checked_in_today_utc);
+                    
                     if (userData.data.checked_in_today_utc === true) {
                       console.log("Usuario ya hizo check-in hoy (UTC) según la base de datos");
                       if (isMounted) setHasCheckedIn(true);
-                    } else if (userData.data.hours_since_last_checkin < 24) {
+                    } else if (!userData.data.can_checkin) {
+                      // Use can_checkin property from API instead of hours_since_last_checkin
                       console.log(`Debe esperar ${userData.data.hours_remaining} horas más para hacer check-in`);
                       if (isMounted) {
                         setError(`You must wait ${userData.data.hours_remaining} hours before checking in again`);
                       }
+                    } else {
+                      // Clear any error if the user can check in
+                      if (isMounted) setError(null);
                     }
                     
                     if (userData.data.last_check_in) {
@@ -528,23 +492,31 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
       const userDataResponse = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
       const userData = await userDataResponse.json();
       
+      // Log the API response for debugging
+      console.log("API response for check-in verification:", userData.data);
+      
       if (userData.data) {
-        // Check for UTC day verification
-          if (userData.data.checked_in_today_utc) {
-            setIsLoading(false);
-            setShowAnimation(false); // Hide animation on error
-            setError('You have already checked in today (UTC). Please try again tomorrow.');
-            setHasCheckedIn(true);
-            return;
-          }
-          
-          // Check for 24 hour period
-          if (userData.data.hours_since_last_checkin < 24) {
-            setIsLoading(false);
-            setShowAnimation(false); // Hide animation on error
-            setError(`You must wait ${userData.data.hours_remaining} hours before checking in again.`);
-            return;
-          }
+        // Log the can_checkin value for debugging
+        console.log("Can check-in value from API during handleCheckIn:", userData.data.can_checkin);
+        console.log("Hours remaining during handleCheckIn:", userData.data.hours_remaining);
+        console.log("Checked in today UTC during handleCheckIn:", userData.data.checked_in_today_utc);
+        
+        // Check for UTC day verification - simplify to a single condition based on can_checkin
+        if (userData.data.checked_in_today_utc) {
+          setIsLoading(false);
+          setShowAnimation(false); // Hide animation on error
+          setError('You have already checked in today (UTC). Please try again tomorrow.');
+          setHasCheckedIn(true);
+          return;
+        }
+        
+        // Usar la propiedad can_checkin que viene de la API
+        if (!userData.data.can_checkin) {
+          setIsLoading(false);
+          setShowAnimation(false); // Hide animation on error
+          setError(`You must wait ${userData.data.hours_remaining} hours before checking in again.`);
+          return;
+        }
       }
     } catch (verifyError) {
       console.error('Error verificando check-in previo:', verifyError);

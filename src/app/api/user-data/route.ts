@@ -75,11 +75,29 @@ export async function GET(req: NextRequest) {
         }
       }
       
-      if (hoursDiff < 24) {
+      // Primero verificar si es un nuevo día UTC
+      if (!data.checked_in_today_utc) {
+        // Si es un nuevo día UTC, permitir check-in independientemente de las horas transcurridas
+        data.can_checkin = true;
+        data.hours_remaining = 0;
+        console.log('User can check in - new UTC day detected', {
+          wallet: walletAddress,
+          lastCheckIn: data.last_check_in,
+          checked_in_today_utc: data.checked_in_today_utc,
+          can_checkin: data.can_checkin,
+          hours_remaining: data.hours_remaining
+        });
+      } else {
+        // Si es el mismo día UTC, no permitir check-in
         data.can_checkin = false;
         data.hours_remaining = Math.ceil(24 - hoursDiff);
-      } else {
-        data.can_checkin = !data.checked_in_today_utc;
+        console.log('User cannot check in - same UTC day', {
+          wallet: walletAddress,
+          lastCheckIn: data.last_check_in,
+          checked_in_today_utc: data.checked_in_today_utc,
+          can_checkin: data.can_checkin,
+          hours_remaining: data.hours_remaining
+        });
       }
     }
       
