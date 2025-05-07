@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     console.log('Datos de la solicitud:', { walletAddress, amount });
     
     // Validaciones básicas
-    if (!walletAddress || !isAddress(walletAddress as Address)) {
+    if (!walletAddress || !isAddress(walletAddress)) {
       return NextResponse.json(
         { error: 'Dirección de wallet inválida' },
         { status: 400 }
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
         connectedEndpoint.apiKey
       );
       
-      // Crear cliente wallet usando viem
+      // Crear cliente wallet usando viem (sin cuenta específica)
       console.log(`Creando cliente wallet usando endpoint: ${connectedEndpoint.name}`);
       const walletClient = await createDirectWalletClient(
         privateKey,
@@ -279,6 +279,7 @@ export async function POST(request: Request) {
             gasPrice: parseGwei('30'),
             gas: BigInt(200000),
             data: approveData
+            // Nota: viem no usa chainId ni chain en TransactionRequest
           };
           
           // Firmar y enviar la transacción de aprobación usando viem
@@ -325,6 +326,7 @@ export async function POST(request: Request) {
           gasPrice: parseGwei('30'), // 30 Gwei
           gas: BigInt(200000), // ERC1155 puede requerir más gas
           data: transferData
+          // Nota: viem no usa chainId en TransactionRequest
         };
         
         // Firmar y enviar la transacción de transferencia usando viem

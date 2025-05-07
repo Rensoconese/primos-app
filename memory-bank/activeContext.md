@@ -10,6 +10,27 @@ El proyecto Primos CheckIn se encuentra actualmente en fase de desarrollo activo
 
 ## Cambios Recientes
 
+### Migración de ethers.js a viem
+- Migración completa de ethers.js a viem para interacciones blockchain
+- Actualización de componentes clave como `RoninWallet.tsx` y `useConnectorStore.ts`
+- Corrección de errores de referencias y compatibilidad
+- Solución al error 406 de Supabase añadiendo el encabezado 'Prefer'
+- Eliminación de archivos redundantes con sufijo "-viem"
+- Migración de `contract-types.ts` para usar tipos y funciones de viem
+- Actualización de `contract.ts` para usar viem con capa de compatibilidad para código existente
+- Implementación de funciones helper para leer y escribir en el contrato usando viem
+- Migración completa de `ContractInteraction.tsx` para usar viem en lugar de ethers.js
+- Migración completa de `nftService.ts` y `NFTDisplay.tsx` para usar viem
+- Migración completa de `RewardsPanel.tsx` para usar viem en lugar de ethers.js
+- Migración completa de `page.tsx` para usar viem en lugar de ethers.js
+- Creación de `direct-rpc-viem.ts` como versión migrada de `direct-rpc.ts`
+- Creación de `rpc-provider-viem.ts` como versión migrada de `rpc-provider.ts`
+- Creación de `claim-tokens-viem.ts` como versión migrada de `claim-tokens/route.ts`
+- Eliminación completa de ethers del proyecto:
+  - Eliminación de los archivos `rpc-provider.ts` y `direct-rpc.ts`
+  - Eliminación de la dependencia de ethers del archivo `package.json`
+  - Verificación de que todos los componentes funcionan correctamente con viem
+
 ### Integración de Redis para Bloqueo de NFTs
 - Implementación de sistema de bloqueo global de NFTs utilizando Redis (Upstash)
 - Creación de servicio `redisService.ts` para gestionar operaciones de Redis

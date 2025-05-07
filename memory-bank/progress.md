@@ -34,6 +34,21 @@
 - ✅ **Eliminación de Verificación Duplicada**: Reducción de llamadas a Redis eliminando verificaciones redundantes
 - ✅ **Mapa Precalculado de Puntos NFT**: Implementación de archivo con puntos precalculados para eliminar cálculos redundantes
 - ✅ **Estrategia "Comparar y Actualizar"**: Reemplazo de "eliminar y reinsertar" por una estrategia más eficiente en la sincronización de NFTs
+- ✅ **Migración a viem**: Reemplazo de ethers.js por viem para mejor rendimiento, tipado y manejo de errores
+  - Migración completa de `contract-types.ts` para usar tipos y funciones de viem
+  - Actualización de `contract.ts` para usar viem con capa de compatibilidad para código existente
+  - Implementación de funciones helper para leer y escribir en el contrato usando viem
+  - Migración completa de `ContractInteraction.tsx` para usar viem en lugar de ethers.js
+  - Migración completa de `nftService.ts` y `NFTDisplay.tsx` para usar viem
+  - Migración completa de `RewardsPanel.tsx` para usar viem en lugar de ethers.js
+  - Migración completa de `page.tsx` para usar viem en lugar de ethers.js
+  - Creación de `direct-rpc-viem.ts` como versión migrada de `direct-rpc.ts`
+  - Creación de `rpc-provider-viem.ts` como versión migrada de `rpc-provider.ts`
+  - Creación de `claim-tokens-viem.ts` como versión migrada de `claim-tokens/route.ts`
+  - Eliminación completa de ethers del proyecto:
+    - Eliminación de los archivos `rpc-provider.ts` y `direct-rpc.ts`
+    - Eliminación de la dependencia de ethers del archivo `package.json`
+    - Verificación de que todos los componentes funcionan correctamente con viem
 
 ### Control de Versiones y Colaboración
 - ✅ **Repositorio GitHub**: Proyecto subido y configurado en GitHub

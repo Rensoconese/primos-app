@@ -1,29 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createWalletClient, custom } from 'viem';
-import { ethers } from 'ethers'; // Para compatibilidad con componentes existentes
+import { createWalletClient, createPublicClient, custom, http, type WalletClient, type PublicClient } from 'viem';
 import { useConnectorStore } from '@/hooks/useConnectorStore';
-
-// Definición de la cadena Ronin
-const ronin = {
-  id: 2020,
-  name: 'Ronin',
-  network: 'ronin',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'RON',
-    symbol: 'RON',
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://api.roninchain.com/rpc'],
-    },
-    public: {
-      http: ['https://api.roninchain.com/rpc'],
-    },
-  },
-};
+import { ronin } from '@/utils/chain';
 
 // Tipos para window.ronin
 declare global {
@@ -35,7 +15,7 @@ declare global {
 }
 
 interface RoninWalletProps {
-  onConnect?: (provider: ethers.providers.Web3Provider) => void;
+  onConnect?: (walletClient: WalletClient, publicClient: PublicClient) => void;
   onDisconnect?: () => void;
 }
 
@@ -53,6 +33,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
   
   const [connecting, setConnecting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [publicClient, setPublicClient] = useState<PublicClient | null>(null);
 
   // Verificar si Ronin Wallet está instalado
   const isRoninWalletInstalled = (): boolean => {
@@ -72,8 +53,14 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
     }
     
     try {
-      // Crear el cliente Viem
+      // Crear el cliente Viem para wallet
       const walletClient = createWalletClient({
+        chain: ronin,
+        transport: custom(window.ronin!.provider)
+      });
+      
+      // Crear el cliente público
+      const newPublicClient = createPublicClient({
         chain: ronin,
         transport: custom(window.ronin!.provider)
       });
@@ -85,6 +72,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
         const address = addresses[0];
         setAccount(address);
         setClient(walletClient);
+        setPublicClient(newPublicClient);
         setIsConnected(true);
         
         // Obtener chainId
@@ -98,13 +86,12 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
           setChainId(2020);
         }
         
-        // Crear proveedor ethers.js para compatibilidad con componentes existentes
+        // Llamar al callback onConnect con los clientes viem
         if (onConnect) {
           try {
-            const ethersProvider = new ethers.providers.Web3Provider(window.ronin!.provider);
-            onConnect(ethersProvider);
+            onConnect(walletClient, newPublicClient);
           } catch (providerErr) {
-            console.error('Error creating ethers provider:', providerErr);
+            console.error('Error calling onConnect:', providerErr);
           }
         }
       } else {
@@ -129,6 +116,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
       setIsConnected(false);
       setAccount(null);
       setClient(null);
+      setPublicClient(null);
       
       if (onDisconnect) {
         onDisconnect();
@@ -148,13 +136,12 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
       if (accounts.length > 0) {
         setAccount(accounts[0]);
         
-        // Si ya estaba conectado, actualizar el proveedor ethers.js
-        if (isConnected && onConnect) {
+        // Si ya estaba conectado, actualizar los clientes viem
+        if (isConnected && client && publicClient && onConnect) {
           try {
-            const ethersProvider = new ethers.providers.Web3Provider(window.ronin!.provider);
-            onConnect(ethersProvider);
+            onConnect(client, publicClient);
           } catch (err) {
-            console.error('Error updating provider after account change:', err);
+            console.error('Error updating clients after account change:', err);
           }
         }
       } else {
@@ -173,13 +160,12 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
       const chainIdNum = parseInt(chainIdHex, 16);
       setChainId(chainIdNum);
       
-      // Actualizar el proveedor ethers.js
-      if (isConnected && onConnect) {
+      // Actualizar los clientes viem
+      if (isConnected && client && publicClient && onConnect) {
         try {
-            const ethersProvider = new ethers.providers.Web3Provider(window.ronin!.provider);
-          onConnect(ethersProvider);
+          onConnect(client, publicClient);
         } catch (err) {
-          console.error('Error updating provider after chain change:', err);
+          console.error('Error updating clients after chain change:', err);
         }
       }
     };
@@ -207,7 +193,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
         window.ronin!.provider.off('disconnect', handleDisconnect);
       }
     };
-  }, [onConnect, onDisconnect, isConnected]);
+  }, [onConnect, onDisconnect, isConnected, client, publicClient]);
   
   // Verificar si ya hay una cuenta conectada (separado del useEffect de los listeners)
   useEffect(() => {
@@ -219,7 +205,20 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
         const accounts = await window.ronin!.provider.request({ method: 'eth_accounts' });
         
         if (accounts && accounts.length > 0) {
+          // Crear los clientes viem
+          const walletClient = createWalletClient({
+            chain: ronin,
+            transport: custom(window.ronin!.provider)
+          });
+          
+          const newPublicClient = createPublicClient({
+            chain: ronin,
+            transport: custom(window.ronin!.provider)
+          });
+          
           setAccount(accounts[0]);
+          setClient(walletClient);
+          setPublicClient(newPublicClient);
           setIsConnected(true);
           
           // Obtener chainId
@@ -228,10 +227,9 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
             const chainIdNum = parseInt(chainIdHex, 16);
             setChainId(chainIdNum);
             
-            // Crear proveedor ethers.js para compatibilidad con componentes existentes
+            // Llamar al callback onConnect con los clientes viem
             if (onConnect) {
-              const ethersProvider = new ethers.providers.Web3Provider(window.ronin!.provider);
-              onConnect(ethersProvider);
+              onConnect(walletClient, newPublicClient);
             }
           } catch (chainErr) {
             console.error('Error getting chainId:', chainErr);

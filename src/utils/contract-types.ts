@@ -1,47 +1,61 @@
-import { BigNumber, BigNumberish, BytesLike, Contract, ContractInterface, Overrides, Signer, CallOverrides, ContractTransaction } from 'ethers';
-import { Provider } from '@ethersproject/providers';
+import { 
+  Address, 
+  Abi, 
+  PublicClient, 
+  WalletClient, 
+  Transport, 
+  Account, 
+  Chain, 
+  GetContractReturnType,
+  ContractFunctionArgs,
+  ContractFunctionName,
+  ReadContractParameters,
+  WriteContractParameters
+} from 'viem';
 
-// Extending the Contract with the exact functions we need for our implementation
-export interface CheckInContract extends Contract {
+// Define the contract function types
+export type CheckInContractFunctions = {
   // View functions
-  owner(overrides?: CallOverrides): Promise<string>;
-  MAX_QUERY_LIMIT(overrides?: CallOverrides): Promise<BigNumber>;
-  PERIOD_DURATION(overrides?: CallOverrides): Promise<BigNumber>;
-  limitDailyCheckIn(overrides?: CallOverrides): Promise<BigNumber>;
-  periodEndAt(overrides?: CallOverrides): Promise<BigNumber>;
+  owner: () => Promise<Address>;
+  MAX_QUERY_LIMIT: () => Promise<bigint>;
+  PERIOD_DURATION: () => Promise<bigint>;
+  limitDailyCheckIn: () => Promise<bigint>;
+  periodEndAt: () => Promise<bigint>;
   
   // User-related view functions
-  isCheckedInToday(user: string, overrides?: CallOverrides): Promise<boolean>;
-  isMissedCheckIn(user: string, overrides?: CallOverrides): Promise<boolean>;
-  getCurrentStreak(user: string, overrides?: CallOverrides): Promise<BigNumber>;
-  getLastUpdatedPeriod(user: string, overrides?: CallOverrides): Promise<BigNumber>;
-  getStreakAtPeriod(user: string, period: BigNumberish, overrides?: CallOverrides): Promise<BigNumber>;
-  computePeriod(timestamp: BigNumberish, overrides?: CallOverrides): Promise<BigNumber>;
+  isCheckedInToday: (user: Address) => Promise<boolean>;
+  isMissedCheckIn: (user: Address) => Promise<boolean>;
+  getCurrentStreak: (user: Address) => Promise<bigint>;
+  getLastUpdatedPeriod: (user: Address) => Promise<bigint>;
+  getStreakAtPeriod: (user: Address, period: bigint | number) => Promise<bigint>;
+  computePeriod: (timestamp: bigint | number) => Promise<bigint>;
   
   // Transaction functions
-  checkIn(to: string, overrides?: Overrides & { from?: string }): Promise<ContractTransaction>;
-  initialize(owner: string, _limitDailyCheckIn: BigNumberish, _periodEndAt: BigNumberish, overrides?: Overrides & { from?: string }): Promise<ContractTransaction>;
-  renounceOwnership(overrides?: Overrides & { from?: string }): Promise<ContractTransaction>;
-  setLimitDailyCheckIn(_limitDailyCheckIn: BigNumberish, overrides?: Overrides & { from?: string }): Promise<ContractTransaction>;
-  transferOwnership(newOwner: string, overrides?: Overrides & { from?: string }): Promise<ContractTransaction>;
+  checkIn: (to: Address) => Promise<`0x${string}`>;
+  initialize: (owner: Address, _limitDailyCheckIn: bigint | number, _periodEndAt: bigint | number) => Promise<`0x${string}`>;
+  renounceOwnership: () => Promise<`0x${string}`>;
+  setLimitDailyCheckIn: (_limitDailyCheckIn: bigint | number) => Promise<`0x${string}`>;
+  transferOwnership: (newOwner: Address) => Promise<`0x${string}`>;
   
   // Complex functions with multiple return values
-  getHistory(
-    user: string,
-    from: BigNumberish,
-    to: BigNumberish,
-    limit: BigNumberish,
-    offset: BigNumberish,
-    overrides?: CallOverrides
-  ): Promise<{
-    numPeriod: BigNumber;
-    periods: BigNumber[];
-    streakCounts: BigNumber[];
+  getHistory: (
+    user: Address,
+    from: bigint | number,
+    to: bigint | number,
+    limit: bigint | number,
+    offset: bigint | number
+  ) => Promise<{
+    numPeriod: bigint;
+    periods: bigint[];
+    streakCounts: bigint[];
   }>;
-}
+};
+
+// Define the contract type
+export type CheckInContract = GetContractReturnType<typeof CHECK_IN_ABI, PublicClient | WalletClient, Address>;
 
 // Complete ABI from check-in.json
-export const CHECK_IN_ABI: ContractInterface = [
+export const CHECK_IN_ABI = [
   {
     "inputs": [],
     "stateMutability": "nonpayable",
@@ -486,12 +500,52 @@ export const CHECK_IN_ABI: ContractInterface = [
   }
 ];
 
-// Factory class for creating contract instances using the more common pattern
-export class CheckIn__factory {
-  static connect(
-    address: string,
-    signerOrProvider: Signer | Provider
-  ): CheckInContract {
-    return new Contract(address, CHECK_IN_ABI, signerOrProvider) as CheckInContract;
+// Factory function for creating contract instances using viem
+export const getCheckInContract = (
+  client: PublicClient | WalletClient,
+  address: Address
+) => {
+  return {
+    address,
+    abi: CHECK_IN_ABI,
+    client,
+  } as unknown as CheckInContract;
+};
+
+// Helper function to read from the contract
+export const readCheckInContract = async <
+  TFunctionName extends ContractFunctionName<typeof CHECK_IN_ABI, 'view' | 'pure'>,
+>(
+  client: PublicClient,
+  args: Omit<ReadContractParameters<typeof CHECK_IN_ABI, TFunctionName>, 'abi'> & {
+    address: Address
   }
-}
+) => {
+  return client.readContract({
+    abi: CHECK_IN_ABI,
+    ...args,
+  });
+};
+
+// Helper function to write to the contract
+export const writeCheckInContract = async <
+  TFunctionName extends ContractFunctionName<typeof CHECK_IN_ABI, 'nonpayable' | 'payable'>,
+>(
+  client: WalletClient,
+  args: {
+    address: Address,
+    functionName: TFunctionName,
+    args?: any[],
+    account: Address,
+    chain: Chain
+  }
+) => {
+  return client.writeContract({
+    abi: CHECK_IN_ABI,
+    address: args.address,
+    functionName: args.functionName,
+    args: args.args,
+    account: args.account,
+    chain: args.chain
+  });
+};

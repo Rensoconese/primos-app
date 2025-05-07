@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { ethers } from 'ethers';
 import { calculateNFTPoints } from '@/services/nftService';
 import { updateLeaderboard } from '@/services/leaderboardService';
 import { normalizeToUTCMidnight, isSameUTCDay, getDayDifferenceUTC, getUTCDebugInfo } from '@/services/dateService';

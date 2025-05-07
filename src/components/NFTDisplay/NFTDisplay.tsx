@@ -1,14 +1,20 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ethers } from 'ethers';
+import { 
+  createPublicClient, 
+  custom, 
+  type PublicClient,
+  type Address
+} from 'viem';
+import { ronin } from '@/utils/chain';
 import { fetchUserNFTs, calculateNFTPoints, PRIMOS_NFT_CONTRACT } from '@/services/nftService';
 import { supabase } from '@/utils/supabase';
 import HowRewardsWorks from './HowRewardsWorks';
 import { isNFTLocked } from '@/services/redisService';
 
 interface NFTDisplayProps {
-  provider: ethers.providers.Web3Provider | null;
+  provider: any; // Cambiado de ethers.providers.Web3Provider a any para compatibilidad
   userAddress: string | null;
   refreshTrigger?: number; // New prop to trigger updates
   onLoadingStateChange?: (isLoading: boolean) => void; // Simplified callback

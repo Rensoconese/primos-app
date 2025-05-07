@@ -1,20 +1,43 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ethers } from 'ethers';
-import { getContract, retry, safeNumberFromBN, safeStringFromBN, directContractCall, RONIN_CHAIN_IDS } from '@/utils/contract';
+import { 
+  getViemContract,
+  retry, 
+  safeNumberFromBigInt, 
+  safeStringFromBigInt, 
+  directContractCall, 
+  RONIN_CHAIN_IDS
+} from '@/utils/contract';
+import { 
+  createWalletClient, 
+  createPublicClient,
+  custom, 
+  type Address,
+  type WalletClient,
+  type PublicClient
+} from 'viem';
+import { ronin } from '@/utils/chain';
 import { getSecondsUntilNextUTCMidnight, formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
 import { updateLeaderboardStreak } from '@/services/leaderboardService';
 
 interface ContractInteractionProps {
-  provider: ethers.providers.Web3Provider | null;
   onCheckInSuccess?: () => void;
   userAddress?: string | null;
   nftCalculationInProgress?: boolean;
   refreshTrigger?: number; // New prop to trigger updates
+  walletClient?: WalletClient | null;
+  publicClient?: PublicClient | null;
 }
 
-const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onCheckInSuccess, userAddress: externalUserAddress, nftCalculationInProgress, refreshTrigger }) => {
+const ContractInteraction: React.FC<ContractInteractionProps> = ({ 
+  walletClient: externalWalletClient, 
+  publicClient: externalPublicClient, 
+  onCheckInSuccess, 
+  userAddress: externalUserAddress, 
+  nftCalculationInProgress, 
+  refreshTrigger 
+}) => {
   const [streak, setStreak] = useState<number>(0);
   const [nextCheckInTime, setNextCheckInTime] = useState<string>('');
   const [streakBroken, setStreakBroken] = useState<boolean>(false);
@@ -49,10 +72,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
       }
     };
   }, [success]);
-  const [userAddress, setUserAddress] = useState<string | null>(null);
+  
+  const [userAddress, setUserAddress] = useState<string | null>(externalUserAddress || null);
   const [networkInfo, setNetworkInfo] = useState<{ chainId: number; networkName: string } | null>(null);
   const [showAnimation, setShowAnimation] = useState<boolean>(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Referencia para el cliente viem
+  const [walletClient, setWalletClient] = useState<WalletClient | null>(externalWalletClient || null);
+  const [publicClient, setPublicClient] = useState<PublicClient | null>(externalPublicClient || null);
 
   // Function to get network name from chain ID
   const getNetworkName = (chainId: number): string => {
@@ -74,18 +102,34 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     setCheckInCount(0);
     setError(null);
     setSuccess(null);
-    setUserAddress(null);
     setNetworkInfo(null);
   };
+
+  // Actualizar userAddress cuando cambia externalUserAddress
+  useEffect(() => {
+    if (externalUserAddress) {
+      setUserAddress(externalUserAddress);
+    }
+  }, [externalUserAddress]);
+
+  // Actualizar walletClient y publicClient cuando cambian los externos
+  useEffect(() => {
+    if (externalWalletClient) {
+      setWalletClient(externalWalletClient);
+    }
+    if (externalPublicClient) {
+      setPublicClient(externalPublicClient);
+    }
+  }, [externalWalletClient, externalPublicClient]);
 
   useEffect(() => {
     // Load streak data from API instead of direct Supabase access
     const loadStreakData = async () => {
-      if (!externalUserAddress) return;
+      if (!userAddress) return;
       
       try {
         console.log('Fetching streak data from API...');
-        const response = await fetch(`/api/user-data?wallet_address=${externalUserAddress.toLowerCase()}`);
+        const response = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
         const result = await response.json();
         
         if (result.error) {
@@ -105,321 +149,270 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     };
     
     loadStreakData();
-  }, [externalUserAddress, refreshTrigger]); // Added refreshTrigger as a dependency
+  }, [userAddress, refreshTrigger]); // Added refreshTrigger as a dependency
 
+  // Cargar datos del contrato cuando cambia el cliente público
   useEffect(() => {
     // Flag to prevent state updates if the component unmounts
     let isMounted = true;
     
-    // Reset all state when provider changes
+    // Reset all state when client changes
     resetState();
     
     const fetchContractData = async () => {
-      if (!provider) {
-        console.error("Provider is not available");
+      if (!publicClient || !userAddress) {
+        console.error("Public client or user address is not available");
         return;
       }
       
-      console.log("Fetching data for new wallet connection...");
+      console.log("Fetching data for wallet:", userAddress);
       
-      // Verificar explícitamente si tenemos acceso a las cuentas
       try {
-        // Esta es una verificación crítica para prevenir el error "unknown account #0"
-        const accounts = await provider.listAccounts();
-        if (!accounts || accounts.length === 0) {
-          if (isMounted) {
-            console.error("No accounts available - user may need to connect wallet");
-            setError('No accounts found in wallet. Please connect your wallet.');
-          }
-          return;
-        }
-        
-        // Si llegamos aquí, tenemos al menos una cuenta
-        const currentAddress = accounts[0];
-        console.log("Found account:", currentAddress);
-        
-        // Establecer la dirección actual - esto es importante para evitar llamadas a getAddress() más adelante
-        if (isMounted) setUserAddress(currentAddress);
-      } catch (accountError) {
-        console.error("Error accessing accounts:", accountError);
-        if (isMounted) setError('Error accessing wallet accounts. Please reconnect your wallet.');
-        return;
-      }
-      
-      // Get network information
-      try {
-        const network = await provider.getNetwork();
-        if (isMounted) {
+        // Obtener información de la red
+        const chainId = publicClient.chain?.id;
+        if (chainId && isMounted) {
           setNetworkInfo({
-            chainId: network.chainId,
-            networkName: getNetworkName(network.chainId)
+            chainId,
+            networkName: getNetworkName(chainId)
           });
         }
-      } catch (err) {
-        console.error("Error fetching network information:", err);
-      }
-      
-      // Force a complete reset of the provider state
-      try {
-        // Get fresh accounts
-        const freshAccounts = await provider.listAccounts();
         
-        // If no accounts, don't try to load data
-        if (!freshAccounts || freshAccounts.length === 0) {
-          if (isMounted) setError('No accounts found in wallet');
-          return;
+        // Obtener el contrato
+        const contract = await getViemContract(publicClient, userAddress as Address);
+        
+        // Add a delay before making contract calls to avoid network congestion
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // We'll try each contract call separately and continue even if some fail
+        let hasError = false;
+        
+        try {
+          // Get contract owner with retry
+          const owner = await retry(async () => {
+            return await publicClient.readContract({
+              address: contract.address as Address,
+              abi: contract.abi,
+              functionName: 'owner'
+            });
+          });
+          if (isMounted) setContractOwner(owner as string);
+        } catch (ownerErr: any) {
+          console.error('Error getting contract owner:', ownerErr);
+          hasError = true;
         }
         
-        // Set the current user address
-        if (isMounted) setUserAddress(freshAccounts[0]);
+        // Add another small delay between calls
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        // Silent delay to ensure the provider is fully connected with the new account
-        await new Promise(resolve => setTimeout(resolve, 800));
-
         try {
-          const contract = await getContract(provider);
-          
+          // Obtener datos del usuario para verificar el último check-in
           try {
-            const accounts = await provider.listAccounts();
+            // Primero consultamos a la API para obtener datos del usuario
+            const userResponse = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
+            const userData = await userResponse.json();
             
-            // Guard against unmounted component
-            if (!isMounted) return;
-            
-            if (accounts.length > 0) {
-              setUserAddress(accounts[0]);
-              
-              // Add a delay before making contract calls to avoid network congestion
-              await new Promise(resolve => setTimeout(resolve, 500));
-              
-              // We'll try each contract call separately and continue even if some fail
-              let hasError = false;
-              
-              try {
-                try {
-                  // Get contract owner with retry
-                  const owner = await retry(async () => {
-                    return await contract.owner();
-                  });
-                  if (isMounted) setContractOwner(owner);
-                } catch (e) {
-                  console.error('Error getting owner:', e);
-                  // If standard owner approach fails, we'll still try one more time but with a slight delay
-                  await new Promise(resolve => setTimeout(resolve, 800));
-                  try {
-                    // Retry once more with the enhanced approach in our contract utility
-                    const retryOwner = await contract.owner();
-                    if (isMounted) setContractOwner(retryOwner);
-                  } catch (retryErr) {
-                    console.error('Retry error getting owner:', retryErr);
-                    if (isMounted) setContractOwner(null);
-                  }
-                }
-              } catch (ownerErr: any) {
-                console.error('Error getting contract owner:', ownerErr);
-                hasError = true;
-              }
-              
-              // Add another small delay between calls
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
-              try {
-                // Obtener datos del usuario para verificar el último check-in
-                try {
-                  // Primero consultamos a la API para obtener datos del usuario
-                  const userResponse = await fetch(`/api/user-data?wallet_address=${accounts[0].toLowerCase()}`);
-                  const userData = await userResponse.json();
-                  
-                  if (userData.data) {
-                    // Check if streak is broken during initial load
-                    // Only show streak broken message if streak is still 0
-                    if (userData.data.streak_broken && userData.data.current_streak === 0) {
-                      console.log("Streak broken detected during initial load");
-                      // Update URL to trigger streak broken notification in NFTDisplay
-                      const url = new URL(window.location.href);
-                      url.searchParams.set('check_in', 'true');
-                      url.searchParams.set('streak_broken', 'true');
-                      window.history.pushState({}, '', url.toString());
-                      
-                      // Set streakBroken state
-                      if (isMounted) setStreakBroken(true);
-                    } else if (userData.data.current_streak > 0) {
-                      // If streak is positive, clear the streakBroken flag
-                      if (isMounted) setStreakBroken(false);
-                    }
-                    
-                    // Log the can_checkin value for debugging
-                    console.log("Can check-in value from API:", userData.data.can_checkin);
-                    console.log("Hours remaining:", userData.data.hours_remaining);
-                    console.log("Checked in today UTC:", userData.data.checked_in_today_utc);
-                    
-                    if (userData.data.checked_in_today_utc === true) {
-                      console.log("Usuario ya hizo check-in hoy (UTC) según la base de datos");
-                      if (isMounted) setHasCheckedIn(true);
-                    } else if (!userData.data.can_checkin) {
-                      // Use can_checkin property from API instead of hours_since_last_checkin
-                      console.log(`Debe esperar ${userData.data.hours_remaining} horas más para hacer check-in`);
-                      if (isMounted) {
-                        setError(`You must wait ${userData.data.hours_remaining} hours before checking in again`);
-                      }
-                    } else {
-                      // Clear any error if the user can check in
-                      if (isMounted) setError(null);
-                    }
-                    
-                    if (userData.data.last_check_in) {
-                      const lastCheckInDate = new Date(userData.data.last_check_in);
-                      
-                      // Format the date in Spanish style
-                      const dateOptions: Intl.DateTimeFormatOptions = { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      };
-                      const timeOptions: Intl.DateTimeFormatOptions = {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                      };
-                      
-                      const dateStr = lastCheckInDate.toLocaleDateString('en-US', dateOptions);
-                      const timeStr = lastCheckInDate.toLocaleTimeString('en-US', timeOptions);
-                      setLastCheckIn(`${dateStr}\n${timeStr}`);
-                    } else {
-                      setLastCheckIn('Never');
-                    }
-                  } else {
-                    setLastCheckIn('Never');
-                  }
-                } catch (apiErr) {
-                  console.error('Error al obtener datos de usuario desde API:', apiErr);
-                  
-                  // Si falla la API, intentamos obtener del contrato como fallback
-                  let lastCheckInTime;
-                  try {
-                    lastCheckInTime = await retry(async () => {
-                      return await contract.getLastUpdatedPeriod(accounts[0]);
-                    });
-                  } catch (innerErr) {
-                    console.error('Error calling getLastCheckIn, trying alternative approach:', innerErr);
-                    // Fallback to 0 if the call fails
-                    lastCheckInTime = ethers.BigNumber.from(0);
-                  }
-                  
-                  if (isMounted) {
-                    if (!lastCheckInTime.isZero()) {
-                      // Get the current date as we need to display a proper date
-                      const now = new Date();
-                      // Format the date in Spanish style (day de month de year)
-                      const dateOptions: Intl.DateTimeFormatOptions = { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      };
-                      const timeOptions: Intl.DateTimeFormatOptions = {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                      };
-                      // Combine date and time
-                      const dateStr = now.toLocaleDateString('en-US', dateOptions);
-                      const timeStr = now.toLocaleTimeString('en-US', timeOptions);
-                      setLastCheckIn(`${dateStr}\n${timeStr}`);
-                    } else {
-                      setLastCheckIn('Never');
-                    }
-                  }
-                }
-              } catch (timeErr: any) {
-                console.error('Error handling last check-in time:', timeErr);
-                hasError = true;
-              }
-              
-              // Add another small delay between calls
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
-              // Try to get check-in status directly from contract first
-              try {
-                const checkedIn = await retry(async () => {
-                  return await contract.isCheckedInToday(accounts[0]);
-                });
-                if (isMounted) setHasCheckedIn(checkedIn);
-              } catch (checkedInErr) {
-                console.error('Error calling hasCheckedIn directly, falling back to date comparison:', checkedInErr);
+            if (userData.data) {
+              // Check if streak is broken during initial load
+              // Only show streak broken message if streak is still 0
+              if (userData.data.streak_broken && userData.data.current_streak === 0) {
+                console.log("Streak broken detected during initial load");
+                // Update URL to trigger streak broken notification in NFTDisplay
+                const url = new URL(window.location.href);
+                url.searchParams.set('check_in', 'true');
+                url.searchParams.set('streak_broken', 'true');
+                window.history.pushState({}, '', url.toString());
                 
-                // Fallback: Since calling hasCheckedIn directly is unreliable, we'll determine checked-in status from last check-in time
-                // Get the current date
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                // If lastCheckIn is not 'Never', parse it to get the date
-                if (lastCheckIn !== 'Never') {
-                  try {
-                    const lastCheckInDate = new Date(lastCheckIn);
-                    lastCheckInDate.setHours(0, 0, 0, 0);
-                    
-                    // Check if the last check-in was today
-                    const checkedInToday = lastCheckInDate.getTime() === today.getTime();
-                    if (isMounted) setHasCheckedIn(checkedInToday);
-                  } catch (parseErr) {
-                    console.error('Error parsing date:', parseErr);
-                    if (isMounted) setHasCheckedIn(false);
-                  }
-                } else {
-                  if (isMounted) setHasCheckedIn(false);
+                // Set streakBroken state
+                if (isMounted) setStreakBroken(true);
+              } else if (userData.data.current_streak > 0) {
+                // If streak is positive, clear the streakBroken flag
+                if (isMounted) setStreakBroken(false);
+              }
+              
+              // Log the can_checkin value for debugging
+              console.log("Can check-in value from API:", userData.data.can_checkin);
+              console.log("Hours remaining:", userData.data.hours_remaining);
+              console.log("Checked in today UTC:", userData.data.checked_in_today_utc);
+              
+              if (userData.data.checked_in_today_utc === true) {
+                console.log("Usuario ya hizo check-in hoy (UTC) según la base de datos");
+                if (isMounted) setHasCheckedIn(true);
+              } else if (!userData.data.can_checkin) {
+                // Use can_checkin property from API instead of hours_since_last_checkin
+                console.log(`Debe esperar ${userData.data.hours_remaining} horas más para hacer check-in`);
+                if (isMounted) {
+                  setError(`You must wait ${userData.data.hours_remaining} hours before checking in again`);
                 }
+              } else {
+                // Clear any error if the user can check in
+                if (isMounted) setError(null);
               }
               
-              // Add another small delay between calls
-              await new Promise(resolve => setTimeout(resolve, 300));
-              
-              try {
-                // Get check-in count with retry and fallback
-                let count;
-                try {
-                  count = await retry(async () => {
-                    return await contract.getCurrentStreak(accounts[0]);
-                  });
-                } catch (innerErr) {
-                  console.error('Error calling getCheckInCount, using fallback:', innerErr);
-                  // Fallback to 0 if the call fails
-                  count = ethers.BigNumber.from(0);
-                }
+              if (userData.data.last_check_in) {
+                const lastCheckInDate = new Date(userData.data.last_check_in);
                 
-                if (isMounted) setCheckInCount(count.toNumber());
-              } catch (countErr: any) {
-                console.error('Error handling check-in count:', countErr);
-                hasError = true;
+                // Format the date in Spanish style
+                const dateOptions: Intl.DateTimeFormatOptions = { 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                };
+                const timeOptions: Intl.DateTimeFormatOptions = {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                };
+                
+                const dateStr = lastCheckInDate.toLocaleDateString('en-US', dateOptions);
+                const timeStr = lastCheckInDate.toLocaleTimeString('en-US', timeOptions);
+                setLastCheckIn(`${dateStr}\n${timeStr}`);
+              } else {
+                setLastCheckIn('Never');
               }
-              
-              // Only show error if all calls failed
-              if (hasError && isMounted) {
-                setError('Some contract data could not be loaded. The contract may not be properly initialized or the network may be congested.');
-              }
-            }
-          } catch (accountsErr: any) {
-            console.error('Error getting accounts:', accountsErr);
-            if (isMounted) setError('Failed to get wallet accounts');
-          }
-        } catch (err: any) {
-          console.error('Error fetching contract data:', err);
-          if (isMounted) {
-            if (err.message?.includes('Contract address is not properly configured')) {
-              setError('Contract address is not properly configured. Please check the contract address.');
             } else {
-              setError('Failed to fetch contract data');
+              setLastCheckIn('Never');
+            }
+          } catch (apiErr) {
+            console.error('Error al obtener datos de usuario desde API:', apiErr);
+            
+            // Si falla la API, intentamos obtener del contrato como fallback
+            let lastCheckInTime;
+            try {
+              lastCheckInTime = await retry(async () => {
+                return await publicClient.readContract({
+                  address: contract.address as Address,
+                  abi: contract.abi,
+                  functionName: 'getLastUpdatedPeriod',
+                  args: [userAddress as Address]
+                });
+              });
+            } catch (innerErr) {
+              console.error('Error calling getLastCheckIn, trying alternative approach:', innerErr);
+              // Fallback to 0 if the call fails
+              lastCheckInTime = BigInt(0);
+            }
+            
+            if (isMounted) {
+              // Verificar si lastCheckInTime tiene un valor positivo
+              const hasValue = lastCheckInTime !== null && 
+                               (typeof lastCheckInTime === 'bigint' ? 
+                                lastCheckInTime > BigInt(0) : false);
+              
+              if (hasValue) {
+                // Get the current date as we need to display a proper date
+                const now = new Date();
+                // Format the date in Spanish style (day de month de year)
+                const dateOptions: Intl.DateTimeFormatOptions = { 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                };
+                const timeOptions: Intl.DateTimeFormatOptions = {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                };
+                // Combine date and time
+                const dateStr = now.toLocaleDateString('en-US', dateOptions);
+                const timeStr = now.toLocaleTimeString('en-US', timeOptions);
+                setLastCheckIn(`${dateStr}\n${timeStr}`);
+              } else {
+                setLastCheckIn('Never');
+              }
             }
           }
+        } catch (timeErr: any) {
+          console.error('Error handling last check-in time:', timeErr);
+          hasError = true;
+        }
+        
+        // Add another small delay between calls
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Try to get check-in status directly from contract first
+        try {
+          const checkedIn = await retry(async () => {
+            return await publicClient.readContract({
+              address: contract.address as Address,
+              abi: contract.abi,
+              functionName: 'isCheckedInToday',
+              args: [userAddress as Address]
+            });
+          });
+          if (isMounted) setHasCheckedIn(Boolean(checkedIn));
+        } catch (checkedInErr) {
+          console.error('Error calling hasCheckedIn directly, falling back to date comparison:', checkedInErr);
+          
+          // Fallback: Since calling hasCheckedIn directly is unreliable, we'll determine checked-in status from last check-in time
+          // Get the current date
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // If lastCheckIn is not 'Never', parse it to get the date
+          if (lastCheckIn !== 'Never') {
+            try {
+              const lastCheckInDate = new Date(lastCheckIn);
+              lastCheckInDate.setHours(0, 0, 0, 0);
+              
+              // Check if the last check-in was today
+              const checkedInToday = lastCheckInDate.getTime() === today.getTime();
+              if (isMounted) setHasCheckedIn(checkedInToday);
+            } catch (parseErr) {
+              console.error('Error parsing date:', parseErr);
+              if (isMounted) setHasCheckedIn(false);
+            }
+          } else {
+            if (isMounted) setHasCheckedIn(false);
+          }
+        }
+        
+        // Add another small delay between calls
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        try {
+          // Get check-in count with retry and fallback
+          let count;
+          try {
+            count = await retry(async () => {
+              return await publicClient.readContract({
+                address: contract.address as Address,
+                abi: contract.abi,
+                functionName: 'getCurrentStreak',
+                args: [userAddress as Address]
+              });
+            });
+          } catch (innerErr) {
+            console.error('Error calling getCheckInCount, using fallback:', innerErr);
+            // Fallback to 0 if the call fails
+            count = BigInt(0);
+          }
+          
+          if (isMounted) setCheckInCount(Number(count));
+        } catch (countErr: any) {
+          console.error('Error handling check-in count:', countErr);
+          hasError = true;
+        }
+        
+        // Only show error if all calls failed
+        if (hasError && isMounted) {
+          setError('Some contract data could not be loaded. The contract may not be properly initialized or the network may be congested.');
         }
       } catch (err: any) {
-        console.error('Error starting data fetch:', err);
-        if (isMounted) setError('Failed to connect to wallet');
+        console.error('Error fetching contract data:', err);
+        if (isMounted) {
+          if (err.message?.includes('Contract address is not properly configured')) {
+            setError('Contract address is not properly configured. Please check the contract address.');
+          } else {
+            setError('Failed to fetch contract data');
+          }
+        }
       }
     };
 
-    // Only fetch data if provider is available
-    if (provider) {
+    // Only fetch data if publicClient and userAddress are available
+    if (publicClient && userAddress) {
       fetchContractData();
     }
     
@@ -427,7 +420,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     return () => {
       isMounted = false;
     };
-  }, [provider]); // Removed lastCheckIn from dependency to prevent infinite loops
+  }, [publicClient, userAddress]); // Removed lastCheckIn from dependency to prevent infinite loops
 
   // Countdown to next check-in (based on UTC midnight)
   useEffect(() => {
@@ -465,8 +458,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
   }, [hasCheckedIn]);
 
   const handleCheckIn = async () => {
-    if (!provider) {
-      setError('Wallet provider not available. Please connect your wallet.');
+    if (!walletClient || !publicClient) {
+      setError('Wallet client not available. Please connect your wallet.');
       return;
     }
     
@@ -524,7 +517,8 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     }
     
     try {
-      const contract = await getContract(provider);
+      // Obtener el contrato usando viem
+      const { abi, address } = await getViemContract(publicClient, userAddress as Address);
       
       try {
         // Add a delay before making contract calls to avoid network congestion
@@ -534,14 +528,25 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
         
         try {
           // Usar directamente el userAddress que ya tenemos
-          // No intentamos obtener el signer address aquí para evitar el error
           console.log("Proceeding with check-in for address:", userAddress);
           
-          // Call checkIn function with user's address
-          const tx = await contract.checkIn(userAddress);
+          // Simular la transacción primero para verificar que funcionará
+          const { request } = await publicClient.simulateContract({
+            address: address as Address,
+            abi,
+            functionName: 'checkIn',
+            args: [userAddress as Address],
+            account: userAddress as Address,
+          });
+          
+          // Enviar la transacción
+          const hash = await walletClient.writeContract(request);
           
           console.log("Check-in transaction sent successfully, waiting for confirmation...");
-          await tx.wait();
+          
+          // Esperar a que la transacción se confirme
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          
           console.log("Check-in transaction confirmed successfully!");
 
           // Después de una transacción exitosa, registrar en Supabase
@@ -554,7 +559,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
               },
               body: JSON.stringify({
                 wallet_address: userAddress,
-                transaction_hash: tx.hash
+                transaction_hash: hash
               }),
             });
             
@@ -632,35 +637,45 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
         
         try {
           try {
-          // Update last check-in time with retry
-          const lastCheckInTime = await retry(async () => {
-            return await contract.getLastUpdatedPeriod(userAddress);
-          });
-          
-          // Get the current date for display purposes
-          const now = new Date();
-          // Format the date in Spanish style (day de month de year)
-          const dateOptions: Intl.DateTimeFormatOptions = { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          };
-          const timeOptions: Intl.DateTimeFormatOptions = {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          };
-          // Combine date and time
-          const dateStr = now.toLocaleDateString('en-US', dateOptions);
-          const timeStr = now.toLocaleTimeString('en-US', timeOptions);
-          setLastCheckIn(`${dateStr}\n${timeStr}`);
-          
-          // Also refresh the check-in status
-          const isCheckedIn = await retry(async () => {
-            return await contract.isCheckedInToday(userAddress);
-          });
-          setHasCheckedIn(isCheckedIn);
+            // Update last check-in time with retry
+            const lastCheckInTime = await retry(async () => {
+              return await publicClient.readContract({
+                address: address as Address,
+                abi,
+                functionName: 'getLastUpdatedPeriod',
+                args: [userAddress as Address],
+              });
+            });
+            
+            // Get the current date for display purposes
+            const now = new Date();
+            // Format the date in Spanish style (day de month de year)
+            const dateOptions: Intl.DateTimeFormatOptions = { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            };
+            const timeOptions: Intl.DateTimeFormatOptions = {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false
+            };
+            // Combine date and time
+            const dateStr = now.toLocaleDateString('en-US', dateOptions);
+            const timeStr = now.toLocaleTimeString('en-US', timeOptions);
+            setLastCheckIn(`${dateStr}\n${timeStr}`);
+            
+            // Also refresh the check-in status
+            const isCheckedIn = await retry(async () => {
+              return await publicClient.readContract({
+                address: address as Address,
+                abi,
+                functionName: 'isCheckedInToday',
+                args: [userAddress as Address],
+              });
+            });
+            setHasCheckedIn(Boolean(isCheckedIn));
           } catch (innerErr) {
             console.error('Error updating last check-in time after check-in, using current time:', innerErr);
             // If failed, just use current time as fallback
@@ -679,9 +694,14 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
           try {
             // Update check-in count with retry
             const count = await retry(async () => {
-              return await contract.getCurrentStreak(userAddress);
+              return await publicClient.readContract({
+                address: address as Address,
+                abi,
+                functionName: 'getCurrentStreak',
+                args: [userAddress as Address],
+              });
             });
-            setCheckInCount(count.toNumber());
+            setCheckInCount(Number(count));
           } catch (innerErr) {
             console.error('Error updating check-in count after check-in, incrementing locally:', innerErr);
             // If failed, increment locally as fallback
@@ -733,7 +753,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
     }
   };
 
-  if (!provider) {
+  if (!walletClient || !publicClient) {
     return (
       <div className="p-6 bg-gray-100 rounded-lg shadow-md">
         <p className="text-center text-gray-600">Please connect your wallet to interact with the contract</p>
@@ -743,8 +763,7 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
 
   return (
     <div className="p-6 bg-gray-800 rounded-lg shadow-md text-white">
-    <h2 className="text-2xl font-bold mb-4 uppercase">Daily Check-in</h2>
-   
+      <h2 className="text-2xl font-bold mb-4 uppercase">Daily Check-in</h2>
       
       {/* Two columns layout for Current Streak and Last Check-in */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -759,15 +778,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
             <div>
               <h3 className="font-bold text-lg text-white">Current Streak</h3>
               <p className="text-2xl font-bold text-white">{streak} days</p>
-              {streak === 0 && (
-                <div className="mt-1 text-red-500 text-sm font-semibold">
-                  Streak lost! Remember to check in daily.
-                </div>
+              {streak === 0 && streakBroken && (
+                <p className="text-red-400 text-sm mt-1">
+                  Your streak was broken! Check in daily to build it back up
+                </p>
               )}
             </div>
           </div>
         </div>
-        
+
         {/* Column 2: Last Check-in */}
         <div className="bg-gray-700 p-4 rounded-md">
           <div className="flex items-start">
@@ -777,63 +796,59 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({ provider, onC
               className="h-14 w-14 mr-3" 
             />
             <div>
-              <h3 className="font-bold text-lg text-white">Last Check-in:</h3>
-              <p className="font-bold whitespace-pre-line text-white">{lastCheckIn}</p>
+              <h3 className="font-bold text-lg text-white">Last Check-in</h3>
+              <p className="text-lg text-white whitespace-pre-line">{lastCheckIn}</p>
+              {hasCheckedIn && (
+                <p className="text-green-400 text-sm mt-1">
+                  Next check-in available in: {nextCheckInTime}
+                </p>
+              )}
             </div>
           </div>
         </div>
       </div>
       
-      <button
-        ref={buttonRef}
-        onClick={handleCheckIn}
-        disabled={isLoading || hasCheckedIn || nftCalculationInProgress}
-        className="w-full px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 mb-4"
-      >
-        {isLoading ? 'Processing...' : 
-         hasCheckedIn ? 'Already Checked In Today' : 
-         nftCalculationInProgress ? 'Calculating NFT Rewards...' : 
-         'Check In Now'}
-      </button>
-      
-      {/* Animation between button and cards */}
-      {showAnimation && (
-        <div className="mb-4">
-          <video 
-            src="/videos/bucle_o.webm"
-            autoPlay
-            loop
-            muted
-            className="w-full h-auto"
-          />
-        </div>
-      )}
-      
-      {nftCalculationInProgress && (
-        <div className="text-center mb-4">
-          <p className="text-sm text-yellow-400">
-            Please wait while we calculate your NFT rewards. This may take a moment for large collections.
-          </p>
-        </div>
-      )}
-      
-      {hasCheckedIn && nextCheckInTime && (
-        <div className="text-center mb-4">
-          <p className="text-sm text-gray-400">Next check-in available in: {nextCheckInTime}</p>
-        </div>
-      )}
-      
-      {error && (
-        <div className="mt-4 p-2 bg-red-100 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="mt-4 p-2 bg-green-100 text-green-700 rounded-md text-sm">
-          {success}
-        </div>
-      )}
+      {/* Check-in Button */}
+      <div className="mt-6 flex flex-col items-center">
+        <button
+          ref={buttonRef}
+          onClick={handleCheckIn}
+          disabled={isLoading || hasCheckedIn || nftCalculationInProgress}
+          className={`w-full px-6 py-3 rounded-lg font-bold text-lg transition-all duration-300 ${
+            hasCheckedIn
+              ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+              : isLoading
+              ? 'bg-blue-700 text-white cursor-wait'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {isLoading ? 'Checking in...' : hasCheckedIn ? 'Already Checked In' : 'Check In Now'}
+        </button>
+        
+        {/* Show animation when checking in */}
+        {showAnimation && (
+          <div className="mt-4 relative">
+            <video autoPlay loop muted className="w-64 h-64">
+              <source src="/videos/fire-dust.webm" type="video/webm" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        )}
+        
+        {/* Error message */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-md">
+            {error}
+          </div>
+        )}
+        
+        {/* Success message */}
+        {success && (
+          <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">
+            {success}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

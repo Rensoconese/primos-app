@@ -2,8 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
-import { ethers } from 'ethers';
-import { FireDustABI } from '@/utils/token-abi';
+import { 
+  createPublicClient, 
+  createWalletClient,
+  custom, 
+  type PublicClient,
+  type WalletClient,
+  type Address,
+  getContract
+} from 'viem';
+import { ronin } from '@/utils/chain';
+import { FIRE_DUST_ABI } from '@/utils/token-abi';
 
 // Dirección del token ERC1155 Fire Dust
 const FIRE_DUST_ADDRESS = '0xE3a334D6b7681D0151b81964CAf6353905e24B1b';
@@ -14,7 +23,7 @@ interface RewardsPanelProps {
   userAddress: string | null;
   totalPoints: number;
   onRewardClaimed: () => void;
-  provider: ethers.providers.Web3Provider | null;
+  provider: any; // Cambiado de ethers.providers.Web3Provider a any para compatibilidad
 }
 
 const RewardsPanel: React.FC<RewardsPanelProps> = ({ 
@@ -39,15 +48,27 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
     
     const fetchTokenBalance = async () => {
       try {
-        // Crear instancia del contrato ERC1155
-        const fireDustContract = new ethers.Contract(
-          FIRE_DUST_ADDRESS,
-          FireDustABI,
-          provider
-        );
+        // Usar el publicClient directamente si está disponible, o crearlo si no
+        const publicClient = provider.publicClient || createPublicClient({
+          chain: ronin,
+          transport: custom(provider.provider || provider)
+        });
+        
+        // Crear instancia del contrato ERC1155 usando viem
+        const fireDustContract = getContract({
+          address: FIRE_DUST_ADDRESS as Address,
+          abi: FIRE_DUST_ABI,
+          client: publicClient
+        });
         
         // Obtener balance del token con ID específico
-        const balance = await fireDustContract.balanceOf(userAddress, FIRE_DUST_ID);
+        const balance = await publicClient.readContract({
+          address: FIRE_DUST_ADDRESS as Address,
+          abi: FIRE_DUST_ABI,
+          functionName: 'balanceOf',
+          args: [userAddress as Address, BigInt(FIRE_DUST_ID)]
+        });
+        
         setTokenBalance(balance.toString());
       } catch (err: any) {
         console.error('Error fetching token balance:', err);
@@ -128,18 +149,31 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
       return;
     }
     
-    // Verificar que podamos acceder a la wallet
+    // Verificar que podamos acceder a la wallet usando viem
     try {
-      const accounts = await provider.listAccounts();
+      // Usar el publicClient y walletClient directamente si están disponibles, o crearlos si no
+      const publicClient = provider.publicClient || createPublicClient({
+        chain: ronin,
+        transport: custom(provider.provider || provider)
+      });
+      
+      // Usar el walletClient directamente si está disponible, o crearlo si no
+      const walletClient = provider.walletClient || createWalletClient({
+        chain: ronin,
+        transport: custom(provider.provider || provider)
+      });
+      
+      // Obtener cuentas
+      const accounts = await walletClient.getAddresses();
       if (accounts.length === 0) {
         setError('No accounts found in wallet. Please reconnect your wallet.');
         return;
       }
       
       // Verificar que estamos en la red correcta
-      const network = await provider.getNetwork();
-      if (![2020, 2021].includes(network.chainId)) {
-        setError(`You are connected to an unsupported network (Chain ID: ${network.chainId}). Please switch to Ronin Mainnet or Testnet.`);
+      const chainId = publicClient.chain.id;
+      if (![2020, 2021].includes(chainId)) {
+        setError(`You are connected to an unsupported network (Chain ID: ${chainId}). Please switch to Ronin Mainnet or Testnet.`);
         return;
       }
     } catch (err) {

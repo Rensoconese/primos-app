@@ -1,7 +1,25 @@
-import { createPublicClient, createWalletClient, http, custom, fallback, type PublicClient, type WalletClient } from 'viem';
+import { 
+  createPublicClient, 
+  createWalletClient, 
+  http, 
+  custom, 
+  fallback, 
+  type PublicClient, 
+  type WalletClient,
+  type Address,
+  getContract as viemGetContract,
+  parseEther,
+  formatEther,
+  toHex
+} from 'viem';
 import { ronin, roninSaigon } from './chain';
-import { ethers } from 'ethers';
-import { CheckIn__factory, CheckInContract } from './contract-types';
+import { 
+  CHECK_IN_ABI, 
+  getCheckInContract, 
+  readCheckInContract, 
+  writeCheckInContract,
+  type CheckInContract 
+} from './contract-types';
 
 /**
  * Direcciones de contrato para diferentes redes
@@ -136,8 +154,49 @@ export const FUNCTION_SELECTORS = {
   getCurrentStreak: '0xccbac9f5', // getCurrentStreak(address)
 };
 
-// Create a contract instance with custom error handling (para compatibilidad con código antiguo)
-export const getContract = async (provider: ethers.providers.Web3Provider): Promise<CheckInContract> => {
+// Create a contract instance with custom error handling
+export const getViemContract = async (
+  client: PublicClient | WalletClient,
+  account?: Address
+): Promise<CheckInContract> => {
+  if (!client) {
+    console.error('Client is null or undefined');
+    throw new Error('Client is not available');
+  }
+  
+  try {
+    // Get current chain information
+    const chainId = client.chain?.id;
+    console.log(`Connected to network with chainId: ${chainId}`);
+    
+    // Get the contract address based on chainId
+    const contractAddress = getContractAddress(chainId) as Address;
+    
+    if (!contractAddress || contractAddress.match(/^0x0+$/)) {
+      console.error('Invalid contract address');
+      throw new Error('Contract address is not properly configured');
+    }
+    
+    console.log(`Using contract address: ${contractAddress}`);
+    
+    // Create the contract using viem
+    const contract = viemGetContract({
+      address: contractAddress,
+      abi: CHECK_IN_ABI,
+      client
+    });
+    
+    return contract as CheckInContract;
+  } catch (error) {
+    console.error('Error creating contract instance:', error);
+    throw error;
+  }
+};
+
+// Compatibility function for ethers-style contract access
+export const getContract = async (provider: any): Promise<any> => {
+  console.warn('Using legacy getContract function. Consider migrating to getViemContract.');
+  
   if (!provider) {
     console.error('Provider is null or undefined');
     throw new Error('Provider is not available');
@@ -182,31 +241,265 @@ export const getContract = async (provider: ethers.providers.Web3Provider): Prom
       throw new Error('Failed to get wallet signer. Please reconnect your wallet.');
     }
     
-    // Create the contract using the factory pattern
-    const contract = CheckIn__factory.connect(contractAddress, signer);
+    // Create a compatibility wrapper for viem contract
+    const walletClient = createWalletClient({
+      chain: ronin,
+      transport: custom(provider.provider)
+    });
     
-    return contract;
+    const publicClient = createPublicClient({
+      chain: ronin,
+      transport: http()
+    });
+    
+    const viemContract = await getViemContract(publicClient);
+    
+    // Create a compatibility wrapper that mimics the ethers contract interface
+    return {
+      // View functions
+      owner: async () => {
+        return readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'owner'
+        });
+      },
+      MAX_QUERY_LIMIT: async () => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'MAX_QUERY_LIMIT'
+        });
+        return { toNumber: () => Number(result) };
+      },
+      PERIOD_DURATION: async () => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'PERIOD_DURATION'
+        });
+        return { toNumber: () => Number(result) };
+      },
+      limitDailyCheckIn: async () => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'limitDailyCheckIn'
+        });
+        return { toNumber: () => Number(result) };
+      },
+      periodEndAt: async () => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'periodEndAt'
+        });
+        return { toNumber: () => Number(result) };
+      },
+      
+      // User-related view functions
+      isCheckedInToday: async (user: string) => {
+        return readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'isCheckedInToday',
+          args: [user as Address]
+        });
+      },
+      isMissedCheckIn: async (user: string) => {
+        return readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'isMissedCheckIn',
+          args: [user as Address]
+        });
+      },
+      getCurrentStreak: async (user: string) => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'getCurrentStreak',
+          args: [user as Address]
+        });
+        return { toNumber: () => Number(result) };
+      },
+      getLastUpdatedPeriod: async (user: string) => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'getLastUpdatedPeriod',
+          args: [user as Address]
+        });
+        return { toNumber: () => Number(result) };
+      },
+      getStreakAtPeriod: async (user: string, period: number) => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'getStreakAtPeriod',
+          args: [user as Address, BigInt(period)]
+        });
+        return { toNumber: () => Number(result) };
+      },
+      computePeriod: async (timestamp: number) => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'computePeriod',
+          args: [BigInt(timestamp)]
+        });
+        return { toNumber: () => Number(result) };
+      },
+      
+      // Transaction functions
+      checkIn: async (to: string) => {
+        const account = await signer.getAddress();
+        const hash = await writeCheckInContract(walletClient, {
+          address: contractAddress as Address,
+          functionName: 'checkIn',
+          args: [to as Address],
+          account: account as Address,
+          chain: ronin
+        });
+        
+        // Create a transaction-like object for compatibility
+        return {
+          hash,
+          wait: async () => {
+            return publicClient.waitForTransactionReceipt({ hash });
+          }
+        };
+      },
+      initialize: async (owner: string, _limitDailyCheckIn: number, _periodEndAt: number) => {
+        const account = await signer.getAddress();
+        const hash = await writeCheckInContract(walletClient, {
+          address: contractAddress as Address,
+          functionName: 'initialize',
+          args: [owner as Address, BigInt(_limitDailyCheckIn), BigInt(_periodEndAt)],
+          account: account as Address,
+          chain: ronin
+        });
+        
+        return {
+          hash,
+          wait: async () => {
+            return publicClient.waitForTransactionReceipt({ hash });
+          }
+        };
+      },
+      renounceOwnership: async () => {
+        const account = await signer.getAddress();
+        const hash = await writeCheckInContract(walletClient, {
+          address: contractAddress as Address,
+          functionName: 'renounceOwnership',
+          account: account as Address,
+          chain: ronin
+        });
+        
+        return {
+          hash,
+          wait: async () => {
+            return publicClient.waitForTransactionReceipt({ hash });
+          }
+        };
+      },
+      setLimitDailyCheckIn: async (_limitDailyCheckIn: number) => {
+        const account = await signer.getAddress();
+        const hash = await writeCheckInContract(walletClient, {
+          address: contractAddress as Address,
+          functionName: 'setLimitDailyCheckIn',
+          args: [BigInt(_limitDailyCheckIn)],
+          account: account as Address,
+          chain: ronin
+        });
+        
+        return {
+          hash,
+          wait: async () => {
+            return publicClient.waitForTransactionReceipt({ hash });
+          }
+        };
+      },
+      transferOwnership: async (newOwner: string) => {
+        const account = await signer.getAddress();
+        const hash = await writeCheckInContract(walletClient, {
+          address: contractAddress as Address,
+          functionName: 'transferOwnership',
+          args: [newOwner as Address],
+          account: account as Address,
+          chain: ronin
+        });
+        
+        return {
+          hash,
+          wait: async () => {
+            return publicClient.waitForTransactionReceipt({ hash });
+          }
+        };
+      },
+      
+      // Complex functions with multiple return values
+      getHistory: async (user: string, from: number, to: number, limit: number, offset: number) => {
+        const result = await readCheckInContract(publicClient, {
+          address: contractAddress as Address,
+          functionName: 'getHistory',
+          args: [user as Address, BigInt(from), BigInt(to), BigInt(limit), BigInt(offset)]
+        });
+        
+        if (result && typeof result === 'object' && 'numPeriod' in result && 'periods' in result && 'streakCounts' in result) {
+          const typedResult = result as {
+            numPeriod: bigint;
+            periods: bigint[];
+            streakCounts: bigint[];
+          };
+          
+          return {
+            numPeriod: { toNumber: () => Number(typedResult.numPeriod) },
+            periods: typedResult.periods.map((p: bigint) => ({ toNumber: () => Number(p) })),
+            streakCounts: typedResult.streakCounts.map((c: bigint) => ({ toNumber: () => Number(c) }))
+          };
+        }
+        
+        // Return default values if result is not as expected
+        return {
+          numPeriod: { toNumber: () => 0 },
+          periods: [],
+          streakCounts: []
+        };
+      }
+    };
   } catch (error) {
     console.error('Error creating contract instance:', error);
     throw error;
   }
 };
 
-// Safe BigNumber conversion helper (para compatibilidad con código antiguo)
-export const safeNumberFromBN = (bn: ethers.BigNumber, defaultValue: number = 0): number => {
+// Safe bigint conversion helper
+export const safeNumberFromBigInt = (bn: bigint, defaultValue: number = 0): number => {
   try {
-    return bn.toNumber();
+    return Number(bn);
   } catch (error) {
-    console.error('Error converting BigNumber to number, possibly too large:', error);
-    if (error instanceof Error && error.message.includes('overflow')) {
-      console.log('BigNumber value (string):', bn.toString());
-    }
+    console.error('Error converting bigint to number, possibly too large:', error);
     return defaultValue;
   }
 };
 
-// Safe string conversion helper (para compatibilidad con código antiguo)
-export const safeStringFromBN = (bn: ethers.BigNumber, defaultValue: string = '0'): string => {
+// Safe string conversion helper
+export const safeStringFromBigInt = (bn: bigint, defaultValue: string = '0'): string => {
+  try {
+    return bn.toString();
+  } catch (error) {
+    console.error('Error converting bigint to string:', error);
+    return defaultValue;
+  }
+};
+
+// Compatibility functions for ethers BigNumber
+export const safeNumberFromBN = (bn: any, defaultValue: number = 0): number => {
+  if (typeof bn === 'bigint') {
+    return safeNumberFromBigInt(bn, defaultValue);
+  }
+  try {
+    return bn.toNumber();
+  } catch (error) {
+    console.error('Error converting BigNumber to number:', error);
+    return defaultValue;
+  }
+};
+
+export const safeStringFromBN = (bn: any, defaultValue: string = '0'): string => {
+  if (typeof bn === 'bigint') {
+    return safeStringFromBigInt(bn, defaultValue);
+  }
   try {
     return bn.toString();
   } catch (error) {
@@ -215,16 +508,16 @@ export const safeStringFromBN = (bn: ethers.BigNumber, defaultValue: string = '0
   }
 };
 
-// Encode a function call with an address parameter (para compatibilidad con código antiguo)
+// Encode a function call with an address parameter
 const encodeAddressParam = (selector: string, address: string): string => {
   // Convert address to padded parameter (32 bytes)
   const paddedAddress = address.slice(2).toLowerCase().padStart(64, '0');
   return `${selector}000000000000000000000000${paddedAddress}`;
 };
 
-// Perform a direct contract call with retries and fallbacks (para compatibilidad con código antiguo)
+// Perform a direct contract call with retries and fallbacks
 export const directContractCall = async <T>(
-  provider: ethers.providers.Web3Provider,
+  client: PublicClient,
   method: string, 
   params: string = '', // Encoded parameters (if any)
   parser: (result: string) => T,
@@ -237,20 +530,20 @@ export const directContractCall = async <T>(
   }
   
   try {
-    // Get network information to determine which contract to use
-    const network = await provider.getNetwork();
-    const contractAddress = getContractAddress(network.chainId);
+    // Get chain information to determine which contract to use
+    const chainId = client.chain?.id;
+    const contractAddress = getContractAddress(chainId);
     
     // Try up to 3 times with increasing delays
     const result = await retry(async () => {
-      return await provider.call({
-        to: contractAddress,
-        data: `${selector}${params}`
+      return await client.call({
+        to: contractAddress as Address,
+        data: `0x${selector}${params}` as `0x${string}`
       });
     }, 3, 500);
     
-    if (result) {
-      return parser(result);
+    if (result.data) {
+      return parser(result.data);
     }
   } catch (error) {
     console.error(`Direct contract call to ${method} failed:`, error);

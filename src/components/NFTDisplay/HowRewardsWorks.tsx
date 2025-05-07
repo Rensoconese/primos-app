@@ -1,13 +1,33 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
 
 const HowRewardsWorks: React.FC = () => {
-  // Get the current UTC time for display
-  const nowUTC = new Date();
-  const utcHours = nowUTC.getUTCHours();
-  const utcMinutes = nowUTC.getUTCMinutes();
-  const formattedUTCTime = `${utcHours.toString().padStart(2, '0')}:${utcMinutes.toString().padStart(2, '0')}`;
+  // Inicializar con un string vacío para evitar errores de hidratación
+  const [formattedUTCTime, setFormattedUTCTime] = useState<string>('');
+
+  // Actualizar la hora solo en el cliente después de la hidratación
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      // Usar el servicio dateService para obtener información UTC
+      const utcInfo = getUTCDebugInfo('HowRewardsWorks', now);
+      // Extraer solo la hora y minutos de la fecha UTC formateada
+      const timeMatch = utcInfo.currentTime.match(/T(\d{2}:\d{2}):/);
+      if (timeMatch && timeMatch[1]) {
+        setFormattedUTCTime(timeMatch[1]);
+      }
+    };
+    
+    // Actualizar inmediatamente
+    updateTime();
+    
+    // Actualizar cada minuto
+    const interval = setInterval(updateTime, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
   return (
     <div className="">
       <h3 className="text-xl font-bold mb-4 uppercase">How bonuses work</h3>

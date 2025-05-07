@@ -1,7 +1,19 @@
 import { supabase } from '@/utils/supabase';
 import { updateLeaderboard } from '@/services/leaderboardService';
-import { ethers } from 'ethers';
-import { abi as ERC721ABI } from '@/utils/erc721-abi'; // You'll need to create this file with the ABI
+import { 
+  createPublicClient, 
+  createWalletClient, 
+  http, 
+  custom, 
+  type PublicClient, 
+  type WalletClient,
+  type Address,
+  getContract,
+  parseEther,
+  formatEther
+} from 'viem';
+import { ronin } from '@/utils/chain';
+import { ERC721_ABI } from '@/utils/erc721-abi';
 import { isNFTLocked, lockNFT } from './redisService';
 import { getNFTPointsSafe } from '@/data/nftPoints';
 
@@ -35,22 +47,42 @@ export interface NFT {
  * Synchronizes user NFTs between the blockchain and the database
  * Uses a compare-and-update strategy instead of delete-and-reinsert
  */
-export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, walletAddress: string) {
+export async function fetchUserNFTs(provider: any, walletAddress: string) {
   try {
     console.log(`⚡ START: Fetching NFTs for wallet: ${walletAddress}`);
     
     // STEP 1: GET NFTS FROM BLOCKCHAIN
-    const contract = new ethers.Contract(PRIMOS_NFT_CONTRACT, ERC721ABI, provider);
-    const balance = await contract.balanceOf(walletAddress);
-    const balanceNum = balance.toNumber();
+    // Usar el publicClient directamente si está disponible, o crearlo si no
+    const publicClient = provider.publicClient || createPublicClient({
+      chain: ronin,
+      transport: custom(provider.provider || provider)
+    });
+    
+    // Crear un contrato usando viem
+    const contract = {
+      address: PRIMOS_NFT_CONTRACT as Address,
+      abi: ERC721_ABI
+    };
+    
+    // Obtener el balance de NFTs
+    const balance = await publicClient.readContract({
+      ...contract,
+      functionName: 'balanceOf',
+      args: [walletAddress as Address]
+    });
+    const balanceNum = Number(balance);
     
     console.log(`Found ${balanceNum} NFTs in blockchain for wallet ${walletAddress}`);
     
     // Get all token IDs from blockchain
     const blockchainNFTIds: number[] = [];
     for (let i = 0; i < balanceNum; i++) {
-      const tokenId = await contract.tokenOfOwnerByIndex(walletAddress, i);
-      blockchainNFTIds.push(tokenId.toNumber());
+      const tokenId = await publicClient.readContract({
+        ...contract,
+        functionName: 'tokenOfOwnerByIndex',
+        args: [walletAddress as Address, BigInt(i)]
+      });
+      blockchainNFTIds.push(Number(tokenId));
     }
     
     // STEP 2: GET EXISTING NFTS FROM DATABASE
@@ -143,7 +175,12 @@ export async function fetchUserNFTs(provider: ethers.providers.Web3Provider, wal
       let tokenURI = null;
       
       try {
-        tokenURI = await contract.tokenURI(tokenId);
+        // Obtener tokenURI usando viem
+        tokenURI = await publicClient.readContract({
+          ...contract,
+          functionName: 'tokenURI',
+          args: [BigInt(tokenId)]
+        });
         
         // Only fetch metadata if this is a new NFT or we need to update
         if (tokenURI) {

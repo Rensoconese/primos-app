@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ethers } from 'ethers';
+import { createPublicClient, custom, type PublicClient } from 'viem';
+import { ronin } from '@/utils/chain';
 import ContractInteraction from '@/components/ContractInteraction';
 import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet';
 import NFTDisplay from '@/components/NFTDisplay/NFTDisplay';
@@ -12,14 +13,16 @@ import { RONIN_CHAIN_IDS } from '@/utils/contract';
 import { supabase } from '@/utils/supabase';
 
 export default function Home() {
-  const [provider, setProvider] = useState<ethers.providers.Web3Provider | null>(null);
+  // Usamos any para mantener compatibilidad con componentes existentes
+  const [provider, setProvider] = useState<any>(null);
   const [networkName, setNetworkName] = useState<string>('Not Connected');
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [userDataRefresh, setUserDataRefresh] = useState<number>(0);
   const [rewardsRefresh, setRewardsRefresh] = useState<number>(0);
   const [nftCalculationInProgress, setNftCalculationInProgress] = useState<boolean>(false);
-  // Removed state for passing functions between components
+  // Estado para el cliente de viem
+  const [viemClient, setViemClient] = useState<PublicClient | null>(null);
 
   // Función para obtener el nombre de la red
   const getNetworkName = (chainId: number): string => {
@@ -34,16 +37,22 @@ export default function Home() {
   };
 
   // Función para conectar wallet
-  const handleConnect = async (newProvider: ethers.providers.Web3Provider) => {
-    setProvider(newProvider);
+  const handleConnect = async (walletClient: any, publicClient: any) => {
+    setProvider({
+      walletClient,
+      publicClient
+    });
     
     // Obtener info de la red
     try {
-      const network = await newProvider.getNetwork();
-      setNetworkName(getNetworkName(network.chainId));
+      setViemClient(publicClient);
+      
+      // Obtener chainId
+      const chainId = publicClient.chain.id;
+      setNetworkName(getNetworkName(chainId));
       
       // Obtener dirección del usuario
-      const accounts = await newProvider.listAccounts();
+      const accounts = await walletClient.getAddresses();
       if (accounts.length > 0) {
         setUserAddress(accounts[0]);
       }
@@ -56,6 +65,7 @@ export default function Home() {
   // Función para desconectar wallet
   const handleDisconnect = () => {
     setProvider(null);
+    setViemClient(null);
     setNetworkName('Not Connected');
     setUserAddress(null);
     setTotalPoints(0);
@@ -185,7 +195,8 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-2">
                   <ContractInteraction 
-                    provider={provider} 
+                    walletClient={provider?.walletClient} 
+                    publicClient={viemClient}
                     userAddress={userAddress}
                     onCheckInSuccess={handleDataRefresh}
                     nftCalculationInProgress={nftCalculationInProgress}
