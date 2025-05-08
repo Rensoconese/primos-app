@@ -40,6 +40,8 @@ function getNFTListedKey(walletAddress: string, tokenId: string): string {
 /**
  * Verifica si un NFT está listado en el marketplace usando el endpoint check-nft-listing
  * que utiliza la misma lógica que test-marketplace
+ * 
+ * NOTA: Esta función siempre consulta directamente a la API sin usar caché
  */
 export async function isNFTListed(contractAddress: string, tokenId: string, ownerAddress: string): Promise<boolean> {
   try {
@@ -50,7 +52,7 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
       ? window.location.origin 
       : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
-    // Usar el nuevo endpoint que implementa la misma lógica que test-marketplace
+    // Siempre forzar refresh=true para evitar caché
     const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${ownerAddress}&token_id=${tokenId}&refresh=true`);
     
     if (!response.ok) {
@@ -77,6 +79,8 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
 /**
  * Verifica el estado de listado de múltiples NFTs en paralelo
  * utilizando el endpoint check-nft-listing para cada NFT
+ * 
+ * NOTA: Esta función siempre consulta directamente a la API sin usar caché
  */
 export async function checkNFTsListingStatus(
   walletAddress: string, 
@@ -96,7 +100,7 @@ export async function checkNFTsListingStatus(
     // Verificar cada NFT en paralelo usando el endpoint check-nft-listing
     const checkPromises = nfts.map(async nft => {
       try {
-        // Consultar el endpoint directamente, sin caché
+        // Siempre forzar refresh=true para evitar caché
         const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${lowerWalletAddress}&token_id=${nft.tokenId}&refresh=true`);
         
         if (!response.ok) {
@@ -136,16 +140,11 @@ export async function checkNFTsListingStatus(
 
 /**
  * Obtiene todos los NFTs listados en el marketplace para la colección de Primos
+ * 
+ * NOTA: Esta función siempre consulta directamente a la API sin usar caché
  */
 export async function getMarketplaceListings(): Promise<NFTListing[]> {
   try {
-    // Verificar si hay datos en caché
-    const cachedListings = await getCachedListings();
-    if (cachedListings) {
-      console.log('Usando listados en caché');
-      return cachedListings;
-    }
-    
     // Obtener la URL base para el proxy
     const baseUrl = typeof window !== 'undefined' 
       ? window.location.origin 
@@ -211,8 +210,7 @@ export async function getMarketplaceListings(): Promise<NFTListing[]> {
         name: nft.name || `Primo #${nft.tokenId}`
       }));
     
-    // Almacenar en caché
-    await cacheListings(listings);
+    // No almacenar en caché para siempre obtener datos actualizados
     
     return listings;
   } catch (error) {

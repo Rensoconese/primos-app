@@ -46,7 +46,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
     setError(null);
     
     if (!isRoninWalletInstalled()) {
-      setError('Ronin Wallet no está instalado');
+      setError('Ronin Wallet is not installed');
       window.open('https://wallet.roninchain.com/', '_blank');
       setConnecting(false);
       return;
@@ -95,11 +95,11 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
           }
         }
       } else {
-        setError('No se pudo obtener la dirección de la wallet');
+        setError('Could not get wallet address');
       }
     } catch (err) {
       console.error('Error connecting to wallet:', err);
-      setError('Error al conectar con la wallet');
+      setError('Error connecting to wallet');
     } finally {
       setConnecting(false);
     }
@@ -254,7 +254,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
             disabled={connecting}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:bg-blue-300"
           >
-            {connecting ? 'Conectando...' : 'Conectar Wallet'}
+            {connecting ? 'Connecting...' : 'Connect Wallet'}
           </button>
           
           {error && (
@@ -272,7 +272,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
             onClick={disconnectWallet}
             className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700"
           >
-            Desconectar
+            Disconnect
           </button>
         </div>
       )}

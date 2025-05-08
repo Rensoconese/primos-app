@@ -3,16 +3,14 @@ import { PRIMOS_NFT_CONTRACT, clearMarketplaceListingsCache } from '@/services/m
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const refresh = url.searchParams.get('refresh') === 'true';
+  // Ignoramos el parámetro refresh y siempre forzamos la actualización
   
   try {
     console.log('Obteniendo listados del marketplace...');
     
-    // Si se solicita actualizar, limpiar la caché primero
-    if (refresh) {
-      console.log('Limpiando caché de listados del marketplace...');
-      await clearMarketplaceListingsCache();
-    }
+    // Siempre limpiar la caché para obtener datos actualizados
+    console.log('Limpiando caché de listados del marketplace...');
+    await clearMarketplaceListingsCache();
     
     // Consultar la API GraphQL a través del proxy para obtener los NFTs listados
     const listedQuery = `

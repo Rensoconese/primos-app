@@ -31,6 +31,8 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
   const [streak, setStreak] = useState<number>(0);
   const [multiplier, setMultiplier] = useState<number>(1);
   const [totalPoints, setTotalPoints] = useState<number>(0);
+  const [marketplaceBlockedPoints, setMarketplaceBlockedPoints] = useState<number>(0);
+  const [marketplaceBlockedCount, setMarketplaceBlockedCount] = useState<number>(0);
   // Eliminado el estado streakBroken que ya no es necesario
   
   // Simple carousel state
@@ -79,26 +81,45 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
           }
         }
         
-        // Calcular NFT points y obtener el mapa de estado en una sola operación
+        // Calcular NFT points y obtener los mapas de estado en una sola operación
         // Pasamos false para que no bloquee los NFTs, solo los verifique
         console.log("Calculando puntos y verificando estado de NFTs en una sola operación");
-        const { totalPoints: eligibleNftPoints, nftStatusMap } = await calculateNFTPoints(userAddress, false);
+        const { totalPoints: eligibleNftPoints, nftStatusMap, lockedNFTsMap, listedNFTsMap } = await calculateNFTPoints(userAddress, false);
         setEligiblePoints(eligibleNftPoints);
         
         // Aplicar el estado de bloqueo a los NFTs
-        const nftsWithUsageStatus = userNfts ? userNfts.map(nft => {
+        const nftsWithStatus = userNfts ? userNfts.map(nft => {
           const tokenIdStr = String(nft.tokenId);
-          const isUsedToday = nftStatusMap && typeof nftStatusMap === 'object' ? 
-            (nftStatusMap as Record<string, boolean>)[tokenIdStr] || false : false;
+          const isUsedToday = lockedNFTsMap && typeof lockedNFTsMap === 'object' ? 
+            (lockedNFTsMap as Record<string, boolean>)[tokenIdStr] || false : false;
+          
+          const isListedInMarketplace = listedNFTsMap && typeof listedNFTsMap === 'object' ? 
+            (listedNFTsMap as Record<string, boolean>)[tokenIdStr] || false : false;
           
           return {
             ...nft,
-            isUsedToday
+            isUsedToday,
+            isListedInMarketplace
           };
         }) : [];
         
-        console.log(`Procesados ${nftsWithUsageStatus.length} NFTs con su estado de bloqueo`);
-        setNfts(nftsWithUsageStatus);
+        // Calcular puntos bloqueados por marketplace
+        let marketplacePoints = 0;
+        let marketplaceCount = 0;
+        
+        nftsWithStatus.forEach(nft => {
+          if (nft.isListedInMarketplace) {
+            marketplaceCount++;
+            marketplacePoints += nft.bonusPoints || 0;
+          }
+        });
+        
+        setMarketplaceBlockedPoints(marketplacePoints);
+        setMarketplaceBlockedCount(marketplaceCount);
+        
+        console.log(`Procesados ${nftsWithStatus.length} NFTs con su estado de bloqueo`);
+        console.log(`NFTs bloqueados por marketplace: ${marketplaceCount}, puntos bloqueados: ${marketplacePoints}`);
+        setNfts(nftsWithStatus);
         
         // Eliminada la verificación de parámetros de URL para streak roto
         
@@ -309,8 +330,9 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
   
   // No more references or functions for passing data between components
   
-  // Calculate potential daily points using totalBonusPoints instead of eligiblePoints
-  const dailyPointsPotential = totalBonusPoints * multiplier;
+  // Calculate potential daily points using available bonus points (excluding marketplace listed NFTs)
+  const availableBonusPoints = totalBonusPoints - marketplaceBlockedPoints;
+  const dailyPointsPotential = availableBonusPoints * multiplier;
   
   // Function to determine the style for each rarity type
   const getRarityStyle = (rarity: string) => {
@@ -348,7 +370,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
       <div className="flex flex-col gap-4 mb-6">
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-gray-700 p-4 rounded-md">
-            <div className="flex items-center">
+            <div className="flex items-start">
               <img 
                 src="/images/bonus_primos.png" 
                 alt="Primos Bonus" 
@@ -356,12 +378,18 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
               />
               <div className="flex-1">
                 <h3 className="font-bold text-lg text-white">Total Primos Bonus</h3>
-                <p className="text-2xl font-bold text-white">+{totalBonusPoints}</p>
+                <p className="text-2xl font-bold text-white">+{availableBonusPoints}</p>
+                    {marketplaceBlockedCount > 0 && (
+                  <div className="text-xs text-yellow-400 mt-1">
+                    <p>{marketplaceBlockedCount} Primos listed in marketplace.</p>
+                    <p>Point reduction: [-{marketplaceBlockedPoints}]</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
           <div className="bg-gray-700 p-4 rounded-md">
-            <div className="flex items-center">
+            <div className="flex items-start">
               <img 
                 src="/images/bous_multiplier.png" 
                 alt="Multiplier Bonus" 
@@ -437,7 +465,7 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
                             <img 
                               src={nft.metadata.image} 
                               alt={nft.metadata.name || `NFT #${nft.tokenId}`}
-                              className={`w-full h-full object-cover ${nft.isUsedToday ? 'opacity-50' : ''}`}
+                              className={`w-full h-full object-cover ${nft.isUsedToday || nft.isListedInMarketplace ? 'opacity-50' : ''}`}
                               loading={index < itemsPerView ? "eager" : "lazy"}
                               onError={(e) => {
                                 e.currentTarget.src = '/placeholder-nft.png'; // Fallback image
@@ -457,6 +485,13 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
                               </span>
                             </div>
                           )}
+                          {nft.isListedInMarketplace && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="bg-yellow-500 text-white px-2 py-1 rounded text-sm font-bold">
+                                Listed in Marketplace
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="p-4 text-white">
@@ -464,6 +499,8 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
                         <p className="text-sm text-gray-300">Bonus: +{nft.bonusPoints}</p>
                         {nft.isUsedToday ? (
                           <p className="text-xs text-red-400 mt-1">Available at 00:00 UTC</p>
+                        ) : nft.isListedInMarketplace ? (
+                          <p className="text-xs text-yellow-400 mt-1">Listed in Marketplace</p>
                         ) : (
                           <p className="text-xs text-green-400 mt-1">Available now</p>
                         )}

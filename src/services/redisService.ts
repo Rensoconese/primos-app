@@ -24,7 +24,6 @@ const redis = new Redis({
 });
 
 // Log para depuración
-console.log('Entorno:', process.env.VERCEL_ENV || 'desarrollo local');
 console.log('Redis URL:', getRedisUrl() ? 'Configurado' : 'No configurado');
 console.log('Redis Token:', getRedisToken() ? 'Configurado' : 'No configurado');
 

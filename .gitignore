@@ -28,7 +28,6 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
-.env.example
 
 # Vercel
 .vercel
@@ -45,8 +44,17 @@ updated_*
 # Scripts de generación de NFT Points (solo desarrollo)
 script-generate-nft-points-map.ts
 generate-nft-points.js
-NFT_POINTS_MAP.md
 
-# Archivos de prueba (test)
-src/app/api/test-*
-REDIS_INTEGRATION.md
+# Archivos de documentación (copias en memory-bank)
+/NFT_POINTS_MAP.md
+/PARALLEL_NFT_VERIFICATION.md
+/REDIS_INTEGRATION.md
+/Vercel_Deployment_Guide.md
+
+# Archivos y directorios de prueba
+/dev-tools/
+src/app/marketplace-test/
+src/components/MarketplaceTest/
+src/app/api/test-*/
+src/app/api/redis-stats/
+src/app/api/redis-clear/

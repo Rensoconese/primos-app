@@ -104,7 +104,15 @@ export async function POST(req: NextRequest) {
     else if (user.current_streak >= 8) multiplier = 1.5;
     
     // Calcular puntos basados en NFTs y bloquearlos en Redis
-    const { totalPoints, eligibleNfts } = await calculateNFTPoints(wallet_address, true);
+    const { totalPoints, eligibleNfts, listedNFTsMap } = await calculateNFTPoints(wallet_address, true);
+    
+    // Contar cuántos NFTs están listados en el marketplace
+    const listedNFTsCount = listedNFTsMap ? 
+      Object.values(listedNFTsMap).filter(isListed => isListed).length : 0;
+    
+    if (listedNFTsCount > 0) {
+      console.log(`Se encontraron ${listedNFTsCount} NFTs listados en el marketplace para la wallet ${wallet_address}`);
+    }
     
     // Aplicar multiplicador al total de puntos de NFTs
     // Si no tiene NFTs, no asignar puntos
@@ -134,6 +142,11 @@ export async function POST(req: NextRequest) {
 // Los NFTs ya están bloqueados en Redis desde calculateNFTPoints
 if (eligibleNfts && eligibleNfts.length > 0) {
   console.log(`Check-in completado con ${eligibleNfts.length} NFTs bloqueados en Redis para la wallet ${wallet_address}`);
+}
+
+// Registrar información sobre NFTs listados en el marketplace
+if (listedNFTsCount > 0) {
+  console.log(`${listedNFTsCount} NFTs listados en el marketplace no fueron utilizados para el check-in`);
 }
     
     // Actualizar total_points
@@ -174,7 +187,10 @@ if (eligibleNfts && eligibleNfts.length > 0) {
       check_in: checkIn,
       points_earned: pointsEarned,
       multiplier,
-      streakBroken
+      streakBroken,
+      marketplace_info: {
+        listed_nfts_count: listedNFTsCount
+      }
     });
     
   } catch (error) {

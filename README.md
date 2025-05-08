@@ -83,3 +83,56 @@ Ronin Saigon is the testnet for the Ronin blockchain. To use it:
 - Make sure your Ronin wallet is connected to the Saigon testnet
 - Ensure you have sufficient testnet RON for gas fees
 - Check the console for any errors during contract interactions
+
+## Documentation and Development Files
+
+### Documentation
+
+All project documentation is stored in the `memory-bank/` directory:
+
+- `projectbrief.md`: Core project requirements and goals
+- `productContext.md`: Why this project exists and how it should work
+- `systemPatterns.md`: System architecture and design patterns
+- `techContext.md`: Technologies used and technical constraints
+- `activeContext.md`: Current work focus and recent changes
+- `progress.md`: What works and what's left to build
+- Additional documentation files for specific features
+
+### Development Tools and Test Files
+
+This project includes development tools and test files that are not required for the main application but are useful during development. These files are excluded from Git by default (via .gitignore).
+
+### Test Files Structure
+
+- `dev-tools/`: Directory containing all test files and utilities
+  - `marketplace-test/`: Test files for the marketplace functionality
+  - `components/MarketplaceTest/`: Components for testing marketplace functionality
+  - `api/`: Test API endpoints (test-marketplace, test-redis, etc.)
+
+### Managing Test Files
+
+A script is provided to help manage test files between the main structure and the dev-tools directory:
+
+```bash
+# Make the script executable (if needed)
+chmod +x dev-tools/manage-test-files.sh
+
+# To restore test files to the main structure (for development)
+./dev-tools/manage-test-files.sh restore
+
+# To backup test files to dev-tools (before committing)
+./dev-tools/manage-test-files.sh backup
+```
+
+### Excluded Files
+
+The following files and directories are excluded from Git:
+
+- `/dev-tools/`
+- `src/app/marketplace-test/`
+- `src/components/MarketplaceTest/`
+- `src/app/api/test-*/`
+- `src/app/api/redis-stats/`
+- `src/app/api/redis-clear/`
+
+See `.gitignore` for the complete list of excluded files.
