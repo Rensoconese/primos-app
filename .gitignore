@@ -28,6 +28,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example
 
 # Vercel
 .vercel
@@ -45,3 +46,7 @@ updated_*
 script-generate-nft-points-map.ts
 generate-nft-points.js
 NFT_POINTS_MAP.md
+
+# Archivos de prueba (test)
+src/app/api/test-*
+REDIS_INTEGRATION.md
