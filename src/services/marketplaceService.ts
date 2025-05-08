@@ -41,7 +41,7 @@ function getNFTListedKey(walletAddress: string, tokenId: string): string {
  * Verifica si un NFT está listado en el marketplace usando el endpoint check-nft-listing
  * que utiliza la misma lógica que test-marketplace
  * 
- * NOTA: Esta función siempre consulta directamente a la API sin usar caché
+ * NOTA: Esta función consulta la API con manejo de errores mejorado
  */
 export async function isNFTListed(contractAddress: string, tokenId: string, ownerAddress: string): Promise<boolean> {
   try {
@@ -52,8 +52,12 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
       ? window.location.origin 
       : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
-    // Siempre forzar refresh=true para evitar caché
-    const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${ownerAddress}&token_id=${tokenId}&refresh=true`);
+    // Usar refresh=true solo en desarrollo, en producción podría causar problemas con Redis
+    const isDevEnvironment = process.env.NODE_ENV === 'development';
+    const refreshParam = isDevEnvironment ? '&refresh=true' : '';
+    
+    // Hacer la solicitud con manejo de errores mejorado
+    const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${ownerAddress}&token_id=${tokenId}${refreshParam}`);
     
     if (!response.ok) {
       throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -100,8 +104,11 @@ export async function checkNFTsListingStatus(
     // Verificar cada NFT en paralelo usando el endpoint check-nft-listing
     const checkPromises = nfts.map(async nft => {
       try {
-        // Siempre forzar refresh=true para evitar caché
-        const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${lowerWalletAddress}&token_id=${nft.tokenId}&refresh=true`);
+        // Usar refresh=true solo en desarrollo, en producción podría causar problemas con Redis
+        const isDevEnvironment = process.env.NODE_ENV === 'development';
+        const refreshParam = isDevEnvironment ? '&refresh=true' : '';
+        
+        const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${lowerWalletAddress}&token_id=${nft.tokenId}${refreshParam}`);
         
         if (!response.ok) {
           throw new Error(`API error: ${response.status} ${response.statusText}`);

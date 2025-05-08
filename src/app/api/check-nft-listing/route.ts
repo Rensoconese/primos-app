@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const walletAddress = url.searchParams.get('wallet_address');
   const tokenId = url.searchParams.get('token_id');
-  // Ignoramos el parámetro refresh y siempre forzamos la actualización
+  const refresh = url.searchParams.get('refresh') === 'true';
   
   if (!walletAddress || !tokenId) {
     return NextResponse.json({ 
@@ -17,8 +17,15 @@ export async function GET(req: NextRequest) {
   const lowerWalletAddress = walletAddress.toLowerCase();
   
   try {
-    // Siempre limpiar la caché para obtener datos actualizados
-    await clearListingCache(walletAddress);
+    // Intentar limpiar la caché solo si se solicita, pero manejar posibles errores
+    if (refresh) {
+      try {
+        await clearListingCache(walletAddress);
+      } catch (cacheError) {
+        console.error('Error al limpiar caché, continuando sin limpiar:', cacheError);
+        // Continuamos con la ejecución aunque falle la limpieza de caché
+      }
+    }
     
     // Consultar la API GraphQL a través del proxy para obtener los NFTs del usuario
     const userNFTsQuery = `
