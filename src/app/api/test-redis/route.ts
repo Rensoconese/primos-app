@@ -3,22 +3,9 @@ import redisService from '@/services/redisService';
 
 export async function GET(req: NextRequest) {
   try {
-    // Obtener URL y token de las variables de entorno para mostrar en la respuesta
-    const getRedisUrl = () => {
-      return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || 
-             process.env.UPSTASH_REDIS_REST_URL || 
-             process.env.NEXT_PUBLIC_KV_REST_API_URL ||
-             process.env.KV_REST_API_URL || 
-             '';
-    };
-
-    const getRedisToken = () => {
-      return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || 
-             process.env.UPSTASH_REDIS_REST_TOKEN || 
-             process.env.NEXT_PUBLIC_KV_REST_API_TOKEN ||
-             process.env.KV_REST_API_TOKEN || 
-             '';
-    };
+    // Importar las funciones de obtención de URL y token desde el servicio Redis
+    // para asegurar que usamos la misma lógica
+    const { getRedisUrl, getRedisToken } = redisService;
     
     const url = getRedisUrl();
     const token = getRedisToken();

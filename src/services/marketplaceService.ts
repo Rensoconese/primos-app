@@ -1,15 +1,5 @@
-import { Redis } from '@upstash/redis';
+// Archivo refactorizado para eliminar la dependencia de Redis
 
-// Inicializar cliente Redis
-const redis = new Redis({
-  url: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '',
-});
-
-// Prefijo para las claves de caché de NFTs listados
-const NFT_LISTED_KEY_PREFIX = 'nft:listed:';
-// Prefijo para la clave de caché de listados del marketplace
-const MARKETPLACE_LISTINGS_KEY = 'marketplace:listings:primos';
 // Dirección del contrato de Primos NFT
 export const PRIMOS_NFT_CONTRACT = '0x23924869ff64ab205b3e3be388a373d75de74ebd';
 
@@ -32,11 +22,6 @@ interface NFTListing {
   name?: string;
 }
 
-// Generar clave para NFT listado
-function getNFTListedKey(walletAddress: string, tokenId: string): string {
-  return `${NFT_LISTED_KEY_PREFIX}${walletAddress.toLowerCase()}:${tokenId}`;
-}
-
 /**
  * Verifica si un NFT está listado en el marketplace usando el endpoint check-nft-listing
  * que utiliza la misma lógica que test-marketplace
@@ -52,7 +37,7 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
       ? window.location.origin 
       : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
-    // Usar refresh=true solo en desarrollo, en producción podría causar problemas con Redis
+    // Usar refresh=true solo en desarrollo
     const isDevEnvironment = process.env.NODE_ENV === 'development';
     const refreshParam = isDevEnvironment ? '&refresh=true' : '';
     
@@ -83,8 +68,6 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
 /**
  * Verifica el estado de listado de múltiples NFTs en paralelo
  * utilizando el endpoint check-nft-listing para cada NFT
- * 
- * NOTA: Esta función siempre consulta directamente a la API sin usar caché
  */
 export async function checkNFTsListingStatus(
   walletAddress: string, 
@@ -104,7 +87,7 @@ export async function checkNFTsListingStatus(
     // Verificar cada NFT en paralelo usando el endpoint check-nft-listing
     const checkPromises = nfts.map(async nft => {
       try {
-        // Usar refresh=true solo en desarrollo, en producción podría causar problemas con Redis
+        // Usar refresh=true solo en desarrollo
         const isDevEnvironment = process.env.NODE_ENV === 'development';
         const refreshParam = isDevEnvironment ? '&refresh=true' : '';
         
@@ -147,8 +130,6 @@ export async function checkNFTsListingStatus(
 
 /**
  * Obtiene todos los NFTs listados en el marketplace para la colección de Primos
- * 
- * NOTA: Esta función siempre consulta directamente a la API sin usar caché
  */
 export async function getMarketplaceListings(): Promise<NFTListing[]> {
   try {
@@ -157,7 +138,7 @@ export async function getMarketplaceListings(): Promise<NFTListing[]> {
       ? window.location.origin 
       : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
-    // Si no hay caché, consultar la API GraphQL a través del proxy
+    // Consultar la API GraphQL a través del proxy
     const query = `
       query {
         erc721Tokens(
@@ -217,8 +198,6 @@ export async function getMarketplaceListings(): Promise<NFTListing[]> {
         name: nft.name || `Primo #${nft.tokenId}`
       }));
     
-    // No almacenar en caché para siempre obtener datos actualizados
-    
     return listings;
   } catch (error) {
     console.error(`Error getting marketplace listings: ${error}`);
@@ -227,90 +206,19 @@ export async function getMarketplaceListings(): Promise<NFTListing[]> {
 }
 
 /**
- * Almacena el estado de listado en Redis con un TTL de 1 día
- */
-export async function cacheListingStatus(walletAddress: string, tokenId: string, isListed: boolean): Promise<boolean> {
-  try {
-    const key = getNFTListedKey(walletAddress, tokenId);
-    const ttl = 86400; // 1 día en segundos
-    
-    const result = await redis.set(key, isListed ? '1' : '0', { ex: ttl });
-    return result === 'OK';
-  } catch (error) {
-    console.error(`Error caching listing status: ${error}`);
-    return false;
-  }
-}
-
-/**
- * Obtiene el estado de listado almacenado en caché
- */
-export async function getCachedListingStatus(walletAddress: string, tokenId: string): Promise<boolean | null> {
-  try {
-    const key = getNFTListedKey(walletAddress, tokenId);
-    const result = await redis.get(key);
-    
-    if (result === null) return null;
-    return result === '1';
-  } catch (error) {
-    console.error(`Error getting cached listing status: ${error}`);
-    return null;
-  }
-}
-
-/**
- * Almacena los listados en caché con un TTL de 15 minutos
- */
-async function cacheListings(listings: NFTListing[]): Promise<boolean> {
-  try {
-    const ttl = 900; // 15 minutos en segundos
-    
-    const result = await redis.set(MARKETPLACE_LISTINGS_KEY, JSON.stringify(listings), { ex: ttl });
-    return result === 'OK';
-  } catch (error) {
-    console.error(`Error caching listings: ${error}`);
-    return false;
-  }
-}
-
-/**
- * Obtiene los listados almacenados en caché
- */
-async function getCachedListings(): Promise<NFTListing[] | null> {
-  try {
-    const result = await redis.get(MARKETPLACE_LISTINGS_KEY);
-    
-    if (result === null) return null;
-    return JSON.parse(result as string);
-  } catch (error) {
-    console.error(`Error getting cached listings: ${error}`);
-    return null;
-  }
-}
-
-/**
- * Limpia la caché de listados para una wallet específica
+ * Función de limpieza de caché refactorizada para no usar Redis
+ * Ahora simplemente registra un mensaje en la consola
  */
 export async function clearListingCache(walletAddress: string): Promise<void> {
-  try {
-    // Obtener todas las claves que coinciden con el patrón
-    const keys = await redis.keys(`${NFT_LISTED_KEY_PREFIX}${walletAddress.toLowerCase()}:*`);
-    
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
-  } catch (error) {
-    console.error(`Error clearing listing cache: ${error}`);
-  }
+  console.log(`[Simulación] Limpiando caché para wallet ${walletAddress}`);
+  // Esta función ya no hace nada con Redis, solo registra un mensaje
 }
 
 /**
- * Limpia la caché de listados del marketplace
+ * Función de limpieza de caché refactorizada para no usar Redis
+ * Ahora simplemente registra un mensaje en la consola
  */
 export async function clearMarketplaceListingsCache(): Promise<void> {
-  try {
-    await redis.del(MARKETPLACE_LISTINGS_KEY);
-  } catch (error) {
-    console.error(`Error clearing marketplace listings cache: ${error}`);
-  }
+  console.log('[Simulación] Limpiando caché de listados del marketplace');
+  // Esta función ya no hace nada con Redis, solo registra un mensaje
 }

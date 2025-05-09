@@ -1,21 +1,81 @@
 import { Redis } from '@upstash/redis';
 
-// Inicializar cliente Redis desde variables de entorno
-// Intentar diferentes variables de entorno para mayor compatibilidad
-export const getRedisUrl = () => {
-  return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || 
-         process.env.UPSTASH_REDIS_REST_URL || 
-         process.env.NEXT_PUBLIC_KV_REST_API_URL ||
-         process.env.KV_REST_API_URL || 
-         '';
+// Función para extraer URL y token de una URL completa (como REDIS_URL o KV_URL)
+const extractCredentialsFromUrl = (url: string): { url: string; token: string } | null => {
+  if (!url) return null;
+  
+  try {
+    // Formato típico: rediss://default:TOKEN@hostname:port
+    const match = url.match(/rediss:\/\/default:([^@]+)@([^:]+):(\d+)/);
+    if (match) {
+      const token = match[1];
+      const hostname = match[2];
+      
+      // Retorna formato compatible con Upstash REST API
+      return {
+        url: `https://${hostname}`,
+        token: token
+      };
+    }
+  } catch (e) {
+    console.error("Error parsing Redis URL:", e);
+  }
+  
+  return null;
 };
 
+// Función para obtener la URL de Redis
+export const getRedisUrl = () => {
+  // Primero intenta obtener URL directamente de las variables estándar
+  const directUrl = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || 
+                   process.env.UPSTASH_REDIS_REST_URL || 
+                   process.env.NEXT_PUBLIC_KV_REST_API_URL ||
+                   process.env.KV_REST_API_URL;
+  
+  if (directUrl) return directUrl;
+  
+  // Si no hay URL directa, intenta extraer de las URLs completas
+  const redisUrl = process.env.REDIS_URL;
+  const kvUrl = process.env.KV_URL;
+  
+  if (redisUrl) {
+    const credentials = extractCredentialsFromUrl(redisUrl);
+    if (credentials) return credentials.url;
+  }
+  
+  if (kvUrl) {
+    const credentials = extractCredentialsFromUrl(kvUrl);
+    if (credentials) return credentials.url;
+  }
+  
+  return '';
+};
+
+// Función para obtener el token de Redis
 export const getRedisToken = () => {
-  return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || 
-         process.env.UPSTASH_REDIS_REST_TOKEN || 
-         process.env.NEXT_PUBLIC_KV_REST_API_TOKEN ||
-         process.env.KV_REST_API_TOKEN || 
-         '';
+  // Primero intenta obtener token directamente de las variables estándar
+  const directToken = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || 
+                     process.env.UPSTASH_REDIS_REST_TOKEN || 
+                     process.env.NEXT_PUBLIC_KV_REST_API_TOKEN ||
+                     process.env.KV_REST_API_TOKEN;
+  
+  if (directToken) return directToken;
+  
+  // Si no hay token directo, intenta extraer de las URLs completas
+  const redisUrl = process.env.REDIS_URL;
+  const kvUrl = process.env.KV_URL;
+  
+  if (redisUrl) {
+    const credentials = extractCredentialsFromUrl(redisUrl);
+    if (credentials) return credentials.token;
+  }
+  
+  if (kvUrl) {
+    const credentials = extractCredentialsFromUrl(kvUrl);
+    if (credentials) return credentials.token;
+  }
+  
+  return '';
 };
 
 const redis = new Redis({
@@ -164,5 +224,7 @@ export default {
   getLockedNFTsByWallet,
   getNFTLockStats,
   testConnection,
-  getSecondsUntilNextUTCMidnight
+  getSecondsUntilNextUTCMidnight,
+  getRedisUrl,
+  getRedisToken
 };
