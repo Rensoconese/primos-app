@@ -24,8 +24,12 @@ export interface LeaderboardData {
  */
 export const updateLeaderboard = async (walletAddress: string, updates: Partial<LeaderboardData>) => {
   try {
+    // Obtener la URL base del navegador (para asegurar que funcione en cualquier entorno)
+    const baseUrl = window.location.origin;
+    console.log(`Base URL: ${baseUrl}`);
+    
     // Usar la API en lugar de actualizar directamente desde el cliente
-    const response = await fetch('/api/update-leaderboard', {
+    const response = await fetch(`${baseUrl}/api/update-leaderboard`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,8 +41,16 @@ export const updateLeaderboard = async (walletAddress: string, updates: Partial<
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to update leaderboard');
+      // Intentar obtener el error como JSON, pero manejar el caso en que no sea JSON válido
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (jsonError) {
+        // Si no es JSON válido, usar el texto de la respuesta
+        const textError = await response.text();
+        throw new Error(`Failed to update leaderboard: ${response.status} - ${textError.substring(0, 100)}...`);
+      }
+      throw new Error(errorData.error || `Failed to update leaderboard: ${response.status}`);
     }
     
     const data = await response.json();
