@@ -52,7 +52,10 @@ generate-nft-points.js
 /Vercel_Deployment_Guide.md
 
 # Archivos y directorios de prueba
-/dev-tools/
+/dev-tools/*
+!/dev-tools/fix-leaderboard.js
+!/dev-tools/fix-user-leaderboard.sh
+!/dev-tools/README.md
 src/app/marketplace-test/
 src/components/MarketplaceTest/
 src/app/api/test-*/

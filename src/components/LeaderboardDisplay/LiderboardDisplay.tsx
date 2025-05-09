@@ -34,8 +34,21 @@ const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => 
         url += `?wallet_address=${account.toLowerCase()}`;
       }
       
-      // Realizar la petición al endpoint
-      const response = await fetch(url);
+      // Añadir un parámetro de timestamp para evitar caché
+      const timestamp = new Date().getTime();
+      url += `${url.includes('?') ? '&' : '?'}t=${timestamp}`;
+      
+      console.log(`Fetching leaderboard data from: ${url}`);
+      
+      // Realizar la petición al endpoint con cache: 'no-store' para evitar caché
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -43,10 +56,26 @@ const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => 
       }
       
       const result = await response.json();
+      console.log('Leaderboard data received:', result);
       
       // Actualizar el estado con los datos recibidos
       setLeaderboardData(result.data || []);
       setUserEntry(result.userEntry);
+      
+      // Log para depuración
+      if (account) {
+        const userInTop = result.data?.find((entry: any) => 
+          entry.wallet_address.toLowerCase() === account.toLowerCase()
+        );
+        
+        if (userInTop) {
+          console.log(`User found in top leaderboard: tokens_claimed=${userInTop.tokens_claimed}`);
+        } else if (result.userEntry) {
+          console.log(`User entry (not in top): tokens_claimed=${result.userEntry.tokens_claimed}, rank=${result.userEntry.rank}`);
+        } else {
+          console.log('User not found in leaderboard data');
+        }
+      }
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
     } finally {

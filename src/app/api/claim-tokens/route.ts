@@ -39,19 +39,52 @@ type RpcEndpoint = {
 // Función para obtener el total de tokens reclamados por un usuario
 async function getUserTotalClaimedTokens(walletAddress: string, supabase: any) {
   try {
+    // Asegurarse de que la dirección esté en minúsculas para consistencia
+    const normalizedAddress = walletAddress.toLowerCase();
+    
+    // Consulta directa con SUM para evitar problemas de cálculo en el cliente
     const { data, error } = await supabase
       .from('rewards')
       .select('tokens_received')
-      .eq('wallet_address', walletAddress.toLowerCase());
+      .eq('wallet_address', normalizedAddress);
       
     if (error) throw error;
     
-    console.log('Rewards data for wallet', walletAddress, ':', data);
+    console.log(`Rewards data for wallet ${normalizedAddress}:`, data);
+    console.log(`Number of reward records found: ${data.length}`);
+    
+    // Verificar cada registro para asegurar que todos los valores son válidos
+    data.forEach((reward: any, index: number) => {
+      console.log(`Record ${index}: tokens_received = ${reward.tokens_received}`);
+      if (reward.tokens_received === null || reward.tokens_received === undefined) {
+        console.warn(`Warning: Invalid tokens_received value in record ${index}`);
+      }
+    });
     
     // Calcula el total sumando los tokens_received
-    const totalClaimed = data.reduce((total: number, reward: any) => total + (reward.tokens_received || 0), 0);
+    const totalClaimed = data.reduce((total: number, reward: any) => {
+      const tokenValue = Number(reward.tokens_received || 0);
+      console.log(`Adding ${tokenValue} to total ${total}`);
+      return total + tokenValue;
+    }, 0);
     
-    console.log('Total claimed tokens calculated from rewards:', totalClaimed);
+    console.log(`Total claimed tokens calculated from rewards: ${totalClaimed}`);
+    
+    // Verificación adicional: obtener el total directamente de la base de datos usando SUM
+    const { data: sumData, error: sumError } = await supabase
+      .rpc('sum_tokens_received', { wallet_addr: normalizedAddress });
+    
+    if (!sumError && sumData !== null) {
+      console.log(`Total from database SUM function: ${sumData}`);
+      
+      // Si hay discrepancia, usar el valor de la suma directa
+      if (sumData !== totalClaimed) {
+        console.warn(`Discrepancy detected: calculated=${totalClaimed}, database sum=${sumData}`);
+        return sumData;
+      }
+    } else {
+      console.log('Could not get sum from database, using calculated value');
+    }
     
     return totalClaimed;
   } catch (err) {
