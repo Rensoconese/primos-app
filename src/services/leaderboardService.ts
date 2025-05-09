@@ -24,93 +24,54 @@ export interface LeaderboardData {
  */
 export const updateLeaderboard = async (walletAddress: string, updates: Partial<LeaderboardData>) => {
   try {
-    // Actualizar directamente usando Supabase en lugar de la API
     console.log(`Actualizando leaderboard para wallet: ${walletAddress.toLowerCase()}`);
     console.log('Actualizaciones a aplicar:', updates);
     
-    // 1. Primero obtener datos existentes del leaderboard
-    const { data: existingData, error: fetchError } = await supabase
-      .from('leaderboard')
-      .select('*')
-      .eq('wallet_address', walletAddress.toLowerCase())
-      .single();
+    // Obtener la URL base del navegador (para asegurar que funcione en cualquier entorno)
+    const baseUrl = window.location.origin;
+    console.log(`Base URL: ${baseUrl}`);
     
-    // 2. Preparar datos para actualización
-    const leaderboardData = {
-      wallet_address: walletAddress.toLowerCase(),
-      ...updates,
-      updated_at: new Date().toISOString() // Siempre actualizar timestamp
-    };
+    // Usar la API para actualizar el leaderboard (tiene permisos de servidor)
+    const response = await fetch(`${baseUrl}/api/update-leaderboard`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({
+        wallet_address: walletAddress,
+        updates
+      }),
+    });
     
-    // 3. Si hay datos existentes, preservar campos que no están incluidos en la actualización
-    if (existingData && !fetchError) {
-      console.log('Datos existentes del leaderboard encontrados:', existingData);
+    // Verificar si la respuesta es exitosa
+    if (!response.ok) {
+      // Capturar el texto de la respuesta para diagnóstico
+      let errorMessage = `Error HTTP ${response.status}`;
       
-      // Para cada campo en los datos existentes, si no está en las actualizaciones, preservarlo
-      if (existingData.tokens_claimed !== undefined && updates.tokens_claimed === undefined) 
-        leaderboardData.tokens_claimed = existingData.tokens_claimed;
-      
-      // Si estamos actualizando tokens_claimed, verificar que el nuevo valor sea mayor o igual al existente
-      if (updates.tokens_claimed !== undefined && existingData.tokens_claimed !== undefined) {
-        console.log(`Comparando tokens_claimed: nuevo=${updates.tokens_claimed}, existente=${existingData.tokens_claimed}`);
-        
-        // Si el nuevo valor es menor que el existente, usar el existente
-        if (updates.tokens_claimed < existingData.tokens_claimed) {
-          console.warn(`Advertencia: Nuevo tokens_claimed (${updates.tokens_claimed}) es menor que el existente (${existingData.tokens_claimed}). Usando el valor existente.`);
-          leaderboardData.tokens_claimed = existingData.tokens_claimed;
+      try {
+        // Intentar parsear como JSON
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (jsonError) {
+        // Si no es JSON, capturar como texto
+        try {
+          const textError = await response.text();
+          errorMessage = `${errorMessage}: ${textError.substring(0, 100)}...`;
+        } catch (textError) {
+          // Si tampoco podemos obtener el texto, usar el mensaje genérico
+          console.error('No se pudo obtener detalles del error:', textError);
         }
       }
       
-      if (existingData.best_streak !== undefined && updates.best_streak === undefined) 
-        leaderboardData.best_streak = existingData.best_streak;
-      
-      // Si estamos actualizando best_streak, asegurarse de que sea el máximo entre el valor existente y el nuevo
-      if (updates.best_streak !== undefined && existingData.best_streak !== undefined) {
-        leaderboardData.best_streak = Math.max(updates.best_streak, existingData.best_streak);
-        console.log(`Usando max best_streak: ${leaderboardData.best_streak}`);
-      }
-      
-      if (existingData.current_streak !== undefined && updates.current_streak === undefined) 
-        leaderboardData.current_streak = existingData.current_streak;
-      
-      if (existingData.nft_count !== undefined && updates.nft_count === undefined) 
-        leaderboardData.nft_count = existingData.nft_count;
-      
-      if (existingData.points_earned !== undefined && updates.points_earned === undefined) 
-        leaderboardData.points_earned = existingData.points_earned;
-      
-      if (existingData.user_name !== undefined && updates.user_name === undefined) 
-        leaderboardData.user_name = existingData.user_name;
-    } else {
-      console.log('No se encontraron datos existentes del leaderboard, creando nueva entrada');
+      throw new Error(errorMessage);
     }
     
-    console.log('Datos finales del leaderboard para upsert:', leaderboardData);
+    // Parsear la respuesta exitosa
+    const data = await response.json();
+    console.log('Respuesta de actualización del leaderboard:', data);
     
-    // 4. Actualizar leaderboard con datos combinados
-    const { data, error } = await supabase
-      .from('leaderboard')
-      .upsert(leaderboardData, { onConflict: 'wallet_address' });
-    
-    if (error) {
-      console.error('Error actualizando leaderboard:', error);
-      throw new Error(`Error actualizando leaderboard: ${error.message}`);
-    }
-    
-    // 5. Verificar que la actualización se haya aplicado correctamente
-    const { data: verifyData, error: verifyError } = await supabase
-      .from('leaderboard')
-      .select('*')
-      .eq('wallet_address', walletAddress.toLowerCase())
-      .single();
-      
-    if (verifyError) {
-      console.error('Error verificando actualización del leaderboard:', verifyError);
-    } else {
-      console.log('Leaderboard actualizado correctamente:', verifyData);
-    }
-    
-    return { success: true, data: verifyData || data };
+    return { success: true, data };
   } catch (error) {
     console.error('Error updating leaderboard:', error);
     return { success: false, error };
