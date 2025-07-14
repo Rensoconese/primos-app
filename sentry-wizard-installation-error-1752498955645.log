@@ -1,0 +1,9 @@
+npm error code EEXIST
+npm error syscall mkdir
+npm error path /Users/rensoconese/.npm/_cacache/content-v2/sha512/09/54
+npm error errno EEXIST
+npm error Invalid response body while trying to fetch https://registry.npmjs.org/magic-string: EACCES: permission denied, mkdir '/Users/rensoconese/.npm/_cacache/content-v2/sha512/09/54'
+npm error File exists: /Users/rensoconese/.npm/_cacache/content-v2/sha512/09/54
+npm error Remove the existing file and try again, or run npm
+npm error with --force to overwrite files recklessly.
+npm error A complete log of this run can be found in: /Users/rensoconese/.npm/_logs/2025-07-14T13_15_40_094Z-debug-0.log
