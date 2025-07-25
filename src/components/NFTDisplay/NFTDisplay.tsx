@@ -12,6 +12,7 @@ import { fetchUserNFTs, calculateNFTPoints, PRIMOS_NFT_CONTRACT } from '@/servic
 import { supabase } from '@/utils/supabase';
 import HowRewardsWorks from './HowRewardsWorks';
 import { isNFTLocked } from '@/services/redisService';
+import { getNFTPointsSafe } from '@/data/nftPoints';
 
 interface NFTDisplayProps {
   provider: any; // Cambiado de ethers.providers.Web3Provider a any para compatibilidad
@@ -96,8 +97,12 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
           const isListedInMarketplace = listedNFTsMap && typeof listedNFTsMap === 'object' ? 
             (listedNFTsMap as Record<string, boolean>)[tokenIdStr] || false : false;
           
+          // Obtener los puntos correctos del mapa precalculado
+          const correctBonusPoints = getNFTPointsSafe(tokenIdStr, nft.bonusPoints || 0);
+          
           return {
             ...nft,
+            bonusPoints: correctBonusPoints, // Usar los puntos correctos
             isUsedToday,
             isListedInMarketplace
           };
@@ -497,10 +502,10 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
                       <div className="p-4 text-white">
                         <h4 className="font-bold">{nft.metadata?.name || `NFT #${nft.tokenId}`}</h4>
                         <p className="text-sm text-gray-300">Bonus: +{nft.bonusPoints}</p>
-                        {nft.isUsedToday ? (
-                          <p className="text-xs text-red-400 mt-1">Available at 00:00 UTC</p>
-                        ) : nft.isListedInMarketplace ? (
+                        {nft.isListedInMarketplace ? (
                           <p className="text-xs text-yellow-400 mt-1">Listed in Marketplace</p>
+                        ) : nft.isUsedToday ? (
+                          <p className="text-xs text-red-400 mt-1">Available at 00:00 UTC</p>
                         ) : (
                           <p className="text-xs text-green-400 mt-1">Available now</p>
                         )}
