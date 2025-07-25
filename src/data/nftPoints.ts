@@ -1,5 +1,5 @@
 // Mapa de puntos de NFTs
-// Generado automáticamente el 2025-07-25T06:43:16.658Z
+// Generado automáticamente el 2025-07-25T06:44:44.456Z
 // NO MODIFICAR MANUALMENTE
 
 // Total de NFTs: 3000
