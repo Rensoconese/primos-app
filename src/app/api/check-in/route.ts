@@ -103,6 +103,12 @@ export async function POST(req: NextRequest) {
     else if (user.current_streak >= 15) multiplier = 2.0;
     else if (user.current_streak >= 8) multiplier = 1.5;
     
+    // TEST DE REDIS ANTES DEL CHECK-IN
+    console.log(`🔴 REDIS TEST: Verificando conexión Redis antes del check-in`);
+    const { testConnection } = await import('@/services/redisService');
+    const redisWorking = await testConnection();
+    console.log(`🔴 REDIS TEST: Estado = ${redisWorking ? 'FUNCIONANDO' : 'FALLO'}`);
+    
     // Calcular puntos basados en NFTs y bloquearlos en Redis
     console.log(`🎯 CHECK-IN: Iniciando cálculo de puntos para wallet ${wallet_address}`);
     const { totalPoints, eligibleNfts, listedNFTsMap } = await calculateNFTPoints(wallet_address, true);
