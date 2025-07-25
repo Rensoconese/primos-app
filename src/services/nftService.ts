@@ -384,6 +384,11 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     const listedNFTsMap: Record<string, boolean> = {}; // true = listado en marketplace, false = no listado
     
     // Procesar resultados y construir los mapas de estado
+    let totalBlockedByMarketplace = 0;
+    let totalBlockedByUsage = 0;
+    let marketplaceBlockedPoints = 0;
+    let usageBlockedPoints = 0;
+    
     checkResults.forEach(result => {
       // Guardar el estado en los mapas
       const tokenId = String(result.nft.token_id);
@@ -391,11 +396,11 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
       lockedNFTsMap[tokenId] = result.isLocked;
       listedNFTsMap[tokenId] = result.isListed;
       
+      // Obtener puntos del mapa precalculado para conteo
+      const bonusPoints = getNFTPointsSafe(tokenId, result.nft.bonus_points || 0);
+      
       // Si está disponible, añadir a elegibles
       if (!result.isUnavailable) {
-        // Obtener puntos del mapa precalculado
-        const bonusPoints = getNFTPointsSafe(tokenId, result.nft.bonus_points || 0);
-        
         // Actualizar los puntos en el objeto NFT
         const nftWithUpdatedPoints = {
           ...result.nft,
@@ -405,16 +410,28 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
         eligibleNfts.push(nftWithUpdatedPoints);
         totalPoints += bonusPoints;
         
-        console.log(`NFT ${result.nft.contract_address}:${tokenId} available with ${bonusPoints} points`);
+        console.log(`✅ NFT ${result.nft.contract_address}:${tokenId} AVAILABLE with ${bonusPoints} points`);
       } else {
         if (result.isLocked) {
-          console.log(`NFT ${result.nft.contract_address}:${tokenId} is already locked, not available for wallet ${walletAddress}`);
+          totalBlockedByUsage++;
+          usageBlockedPoints += bonusPoints;
+          console.log(`🔒 NFT ${result.nft.contract_address}:${tokenId} BLOCKED by daily usage (${bonusPoints} points lost)`);
         }
         if (result.isListed) {
-          console.log(`NFT ${result.nft.contract_address}:${tokenId} is listed in the marketplace, not available for wallet ${walletAddress}`);
+          totalBlockedByMarketplace++;
+          marketplaceBlockedPoints += bonusPoints;
+          console.log(`🏪 NFT ${result.nft.contract_address}:${tokenId} BLOCKED by marketplace listing (${bonusPoints} points lost)`);
         }
       }
     });
+    
+    // Log de resumen detallado
+    console.log(`\n📊 RESUMEN DE CÁLCULO DE PUNTOS:`);
+    console.log(`Total NFTs verificados: ${checkResults.length}`);
+    console.log(`NFTs disponibles: ${eligibleNfts.length}`);
+    console.log(`NFTs bloqueados por uso diario: ${totalBlockedByUsage} (${usageBlockedPoints} puntos)`);
+    console.log(`NFTs bloqueados por marketplace: ${totalBlockedByMarketplace} (${marketplaceBlockedPoints} puntos)`);
+    console.log(`PUNTOS TOTALES ELEGIBLES: ${totalPoints}`);
     
     // Paso 3: Si es necesario, bloquear los NFTs elegibles en paralelo
     if (blockNFTs && eligibleNfts.length > 0) {
