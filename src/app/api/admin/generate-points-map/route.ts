@@ -193,6 +193,16 @@ export async function POST(request: Request) {
     const nftPoints: Record<string, number> = {};
     let totalProcessed = 0;
     let totalFullSets = 0;
+    
+    // Debug específico para NFT #2228
+    const nft2228Debug = {
+      foundInTokenToFullSetMap: tokenToFullSetMap.has(2228),
+      tokenToFullSetMapSize: tokenToFullSetMap.size,
+      rarity: tokenToRarityMap.get(2228) || 'not_found',
+      fullSetBonus: 0,
+      basePoints: 0,
+      finalPoints: 0
+    };
 
     // Procesar del 1 al 3000 (asumiendo que hay 3000 NFTs)
     for (let tokenId = 1; tokenId <= 3000; tokenId++) {
@@ -210,10 +220,17 @@ export async function POST(request: Request) {
           console.log(`Base points: ${rarityPointsMap[rarity] || 1}`);
           console.log(`Full Set bonus: ${fullSetBonus}`);
           console.log(`Total points: ${points}`);
+          
+          nft2228Debug.fullSetBonus = fullSetBonus;
+          nft2228Debug.basePoints = rarityPointsMap[rarity] || 1;
+          nft2228Debug.finalPoints = points;
         }
       } else if (tokenId === 2228) {
         console.log('❌ NFT #2228: Full Set NO detectado en el mapa');
         console.log(`TokenToFullSetMap contiene: ${Array.from(tokenToFullSetMap.keys()).includes(2228)}`);
+        
+        nft2228Debug.basePoints = rarityPointsMap[rarity] || 1;
+        nft2228Debug.finalPoints = points;
       }
       
       nftPoints[tokenId.toString()] = points;
@@ -361,6 +378,7 @@ Admin: ${adminWallet}
       rarityConfig: rarityPointsMap,
       fileContent: fileContent, // Siempre devolver el contenido para debug
       nft2228Points: nftPoints['2228'], // Debug específico para NFT #2228
+      nft2228Debug: nft2228Debug, // Debug completo de NFT #2228
       githubCommit: fileWritten ? commitSha : null
     });
 
