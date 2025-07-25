@@ -30,7 +30,7 @@ interface NFTListing {
  */
 export async function isNFTListed(contractAddress: string, tokenId: string, ownerAddress: string): Promise<boolean> {
   try {
-    console.log(`Verificando si NFT ${contractAddress}:${tokenId} está listado para wallet ${ownerAddress}`);
+    console.log(`🏪 MARKETPLACE CHECK: Verificando NFT ${tokenId} para wallet ${ownerAddress}`);
     
     // Obtener la URL base
     const baseUrl = typeof window !== 'undefined' 
@@ -55,7 +55,7 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
     }
     
     const isListed = data.isListed || false;
-    console.log(`NFT ${tokenId} - Estado en API: ${isListed ? 'Listado' : 'No listado'}`);
+    console.log(`🏪 MARKETPLACE RESULT: NFT ${tokenId} - ${isListed ? '❌ LISTADO (será bloqueado)' : '✅ NO LISTADO (disponible)'}`);
     
     return isListed;
   } catch (error) {
