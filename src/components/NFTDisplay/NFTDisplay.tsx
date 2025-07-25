@@ -100,6 +100,16 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
           // Obtener los puntos correctos del mapa precalculado
           const correctBonusPoints = getNFTPointsSafe(tokenIdStr, nft.bonusPoints || 0);
           
+          // Debug específico para NFT #2228
+          if (tokenIdStr === '2228') {
+            console.log(`🐛 DEBUG NFT #2228 points:`, {
+              tokenId: tokenIdStr,
+              fromNFTPointsMap: correctBonusPoints,
+              fromDatabase: nft.bonusPoints,
+              finalUsed: correctBonusPoints
+            });
+          }
+          
           return {
             ...nft,
             bonusPoints: correctBonusPoints, // Usar los puntos correctos
