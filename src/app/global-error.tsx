@@ -1,7 +1,5 @@
 'use client';
 
-import * as Sentry from '@sentry/nextjs';
-import NextError from 'next/error';
 import { useEffect } from 'react';
 
 export default function GlobalError({
@@ -12,12 +10,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Solo capturar errores que no sean de MetaMask/wallet
-    if (!error.message?.includes('MetaMask') && 
-        !error.message?.includes('disconnect') &&
-        !error.message?.includes('wallet')) {
-      Sentry.captureException(error);
-    }
+    // Log error to console instead of Sentry
+    console.error('Global error caught:', error);
   }, [error]);
 
   // Determinar si es un error de wallet
