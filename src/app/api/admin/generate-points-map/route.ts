@@ -110,6 +110,17 @@ export async function POST(request: Request) {
     }
 
     console.log(`Encontrados ${nfts?.length || 0} NFTs en la base de datos`);
+    
+    // Debug: verificar si NFT #2228 está en la consulta
+    const nft2228InQuery = nfts?.find(nft => Number(nft.token_id) === 2228);
+    console.log(`NFT #2228 en consulta:`, nft2228InQuery ? 'SÍ' : 'NO');
+    if (nft2228InQuery) {
+      console.log(`NFT #2228 datos:`, {
+        token_id: nft2228InQuery.token_id,
+        rarity: nft2228InQuery.rarity,
+        is_full_set: nft2228InQuery.is_full_set
+      });
+    }
 
     // 3. Crear un Set para obtener token_ids únicos
     const uniqueTokenIds = new Set<number>();
