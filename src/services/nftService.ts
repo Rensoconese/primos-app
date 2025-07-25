@@ -354,6 +354,12 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
         // Verificar si el NFT está listado en el marketplace
         const isListed = await isNFTListed(nft.contract_address, String(nft.token_id), walletAddress);
         
+        // Si está listado en marketplace, también bloquearlo en Redis
+        if (isListed && !isLocked) {
+          console.log(`🏪 NFT ${nft.contract_address}:${nft.token_id} está en marketplace - bloqueando en Redis`);
+          await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
+        }
+        
         // Un NFT no está disponible si está bloqueado O listado en el marketplace
         const isUnavailable = isLocked || isListed;
         
