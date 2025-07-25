@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { Octokit } from '@octokit/rest';
 
 // Lista de wallets autorizadas
 const AUTHORIZED_ADMINS = [
@@ -266,9 +267,72 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 }
 `;
 
-    // 6. En producción (Vercel) no podemos escribir archivos
-    const fileWritten = false;
-    console.log('Mapa de puntos generado correctamente (archivo no escrito en producción)');
+    // 6. Escribir a GitHub usando la API
+    let fileWritten = false;
+    let commitSha = '';
+    
+    try {
+      // Solo hacer commit si tenemos GitHub token
+      const githubToken = process.env.GITHUB_TOKEN;
+      if (githubToken) {
+        console.log('Iniciando commit automático a GitHub...');
+        
+        const octokit = new Octokit({
+          auth: githubToken,
+        });
+        
+        // Configuración del repositorio
+        const owner = 'Rensoconese'; // Tu usuario de GitHub
+        const repo = 'primos-app';   // Tu repositorio
+        const path = 'src/data/nftPoints.ts';
+        const branch = 'main';
+        
+        // Obtener el archivo actual para el SHA
+        let currentFileSha = '';
+        try {
+          const { data: currentFile } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path,
+            ref: branch,
+          });
+          if ('sha' in currentFile) {
+            currentFileSha = currentFile.sha;
+          }
+        } catch (getError) {
+          console.log('Archivo no existe, creando nuevo archivo');
+        }
+        
+        // Crear/actualizar archivo
+        const commitMessage = `chore: Regenerar mapa de puntos NFT - ${new Date().toISOString()}
+
+Total NFTs: ${totalProcessed}
+Total Full Sets: ${totalFullSets}
+Admin: ${adminWallet}
+
+🤖 Generated with [Claude Code](https://claude.ai/code)`;
+
+        const { data: commitData } = await octokit.rest.repos.createOrUpdateFileContents({
+          owner,
+          repo,
+          path,
+          message: commitMessage,
+          content: Buffer.from(fileContent).toString('base64'),
+          sha: currentFileSha || undefined,
+          branch,
+        });
+        
+        commitSha = commitData.commit.sha;
+        fileWritten = true;
+        console.log(`✅ Commit exitoso a GitHub: ${commitSha}`);
+        
+      } else {
+        console.log('⚠️ GITHUB_TOKEN no configurado, no se puede hacer commit automático');
+      }
+    } catch (githubError) {
+      console.error('❌ Error haciendo commit a GitHub:', githubError);
+      // No fallar la operación por error de GitHub
+    }
 
     // 7. Registrar en auditoría
     await supabase
@@ -289,12 +353,15 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 
     return NextResponse.json({
       success: true,
-      message: fileWritten ? 'Archivo de puntos generado exitosamente' : 'Mapa de puntos calculado (archivo no escrito en producción)',
+      message: fileWritten 
+        ? `Mapa de puntos generado y commitado a GitHub (${commitSha.substring(0, 7)})` 
+        : 'Mapa de puntos calculado (sin commit - GITHUB_TOKEN no configurado)',
       totalNFTs: totalProcessed,
       totalFullSets: totalFullSets,
       rarityConfig: rarityPointsMap,
       fileContent: fileContent, // Siempre devolver el contenido para debug
-      nft2228Points: nftPoints['2228'] // Debug específico para NFT #2228
+      nft2228Points: nftPoints['2228'], // Debug específico para NFT #2228
+      githubCommit: fileWritten ? commitSha : null
     });
 
   } catch (error) {
