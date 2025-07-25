@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { writeFileSync } from 'fs';
-import { join } from 'path';
 
 // Lista de wallets autorizadas
 const AUTHORIZED_ADMINS = [
@@ -264,25 +262,9 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 }
 `;
 
-    // 6. En producción (Vercel) no podemos escribir archivos, solo mostrar el contenido
-    let filePath = '';
-    let fileWritten = false;
-    
-    try {
-      // Intentar escribir solo en desarrollo local
-      if (process.env.NODE_ENV !== 'production') {
-        filePath = join(process.cwd(), 'src', 'data', 'nftPoints.ts');
-        writeFileSync(filePath, fileContent, 'utf-8');
-        fileWritten = true;
-        console.log(`Archivo generado exitosamente en: ${filePath}`);
-      } else {
-        console.log('Producción: Archivo no escrito (Vercel es read-only)');
-        console.log('Contenido generado correctamente para descarga manual');
-      }
-    } catch (writeError) {
-      console.error('Error escribiendo archivo:', writeError);
-      // No fallar por error de escritura
-    }
+    // 6. En producción (Vercel) no podemos escribir archivos
+    const fileWritten = false;
+    console.log('Mapa de puntos generado correctamente (archivo no escrito en producción)');
 
     // 7. Registrar en auditoría
     await supabase
@@ -307,8 +289,8 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
       totalNFTs: totalProcessed,
       totalFullSets: totalFullSets,
       rarityConfig: rarityPointsMap,
-      fileContent: process.env.NODE_ENV === 'production' ? fileContent : undefined, // Solo enviar contenido en producción
-      filePath: fileWritten ? filePath : undefined
+      fileContent: fileContent, // Siempre devolver el contenido para debug
+      nft2228Points: nftPoints['2228'] // Debug específico para NFT #2228
     });
 
   } catch (error) {
