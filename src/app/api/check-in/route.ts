@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
     else if (user.current_streak >= 8) multiplier = 1.5;
     
     // Calcular puntos basados en NFTs y bloquearlos en Redis
+    console.log(`🎯 CHECK-IN: Iniciando cálculo de puntos para wallet ${wallet_address}`);
     const { totalPoints, eligibleNfts, listedNFTsMap } = await calculateNFTPoints(wallet_address, true);
+    console.log(`🎯 CHECK-IN: Resultado - Puntos totales: ${totalPoints}, NFTs elegibles: ${eligibleNfts?.length || 0}`);
     
     // Contar cuántos NFTs están listados en el marketplace
     const listedNFTsCount = listedNFTsMap ? 
