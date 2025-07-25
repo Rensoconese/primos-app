@@ -142,11 +142,21 @@ export async function POST(request: Request) {
         
         // También verificar Full Set en metadata si no está en el campo directo
         if (!tokenToFullSetMap.has(tokenId)) {
-          const fullSetAttr = attributes.find((attr: any) => 
-            attr.trait_type?.toLowerCase() === 'full set' && attr.value === true
-          );
-          if (fullSetAttr) {
-            tokenToFullSetMap.set(tokenId, true);
+          try {
+            const fullSetAttr = attributes.find((attr: any) => {
+              const traitType = attr.trait_type?.toLowerCase();
+              return (traitType === 'full set' || traitType === 'fullset') && attr.value === true;
+            });
+            if (fullSetAttr) {
+              tokenToFullSetMap.set(tokenId, true);
+              // Debug específico para NFT #2228
+              if (tokenId === 2228) {
+                console.log('🎯 NFT #2228: Full Set detectado en metadata');
+                console.log(`Atributo: ${JSON.stringify(fullSetAttr)}`);
+              }
+            }
+          } catch (metaError) {
+            console.error(`Error procesando metadata para NFT ${tokenId}:`, metaError);
           }
         }
       }
@@ -190,6 +200,17 @@ export async function POST(request: Request) {
       if (tokenToFullSetMap.has(tokenId)) {
         points += fullSetBonus;
         totalFullSets++;
+        
+        // Debug específico para NFT #2228
+        if (tokenId === 2228) {
+          console.log('🎯 NFT #2228: FULL SET BONUS APLICADO');
+          console.log(`Base points: ${rarityPointsMap[rarity] || 1}`);
+          console.log(`Full Set bonus: ${fullSetBonus}`);
+          console.log(`Total points: ${points}`);
+        }
+      } else if (tokenId === 2228) {
+        console.log('❌ NFT #2228: Full Set NO detectado en el mapa');
+        console.log(`TokenToFullSetMap contiene: ${Array.from(tokenToFullSetMap.keys()).includes(2228)}`);
       }
       
       nftPoints[tokenId.toString()] = points;
