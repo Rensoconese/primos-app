@@ -122,6 +122,10 @@ export async function POST(request: Request) {
       // Guardar si es Full Set
       if (nft.is_full_set) {
         tokenToFullSetMap.set(tokenId, true);
+        // Debug específico para NFT #2228
+        if (tokenId === 2228) {
+          console.log('🎯 NFT #2228: Full Set detectado en campo is_full_set');
+        }
       }
       
       // Determinar rareza del NFT
