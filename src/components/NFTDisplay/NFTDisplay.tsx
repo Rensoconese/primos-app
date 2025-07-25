@@ -175,12 +175,14 @@ const NFTDisplay: React.FC<NFTDisplayProps> = ({ provider, userAddress, refreshT
         // Now calculate total points from all NFTs regardless of usage
         const { data: allNfts, error: allNftsError } = await supabase
           .from('nfts')
-          .select('bonus_points')
+          .select('token_id')
           .eq('wallet_address', userAddress.toLowerCase());
           
         if (allNftsError) throw allNftsError;
         
-        const allNftsTotal = allNfts.reduce((sum, nft) => sum + (nft.bonus_points || 0), 0);
+        // Calculate total using the points map instead of bonus_points column
+        const { getNFTPointsSafe } = await import('@/data/nftPoints');
+        const allNftsTotal = allNfts.reduce((sum, nft) => sum + getNFTPointsSafe(String(nft.token_id), 0), 0);
         setTotalBonusPoints(allNftsTotal);
         
         // Determine if all points are used today

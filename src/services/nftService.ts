@@ -35,7 +35,6 @@ export interface NFTMetadata {
 export interface NFT {
   token_id: string | number;
   contract_address: string;
-  bonus_points?: number;
   rarity?: string;
   is_shiny?: boolean;
   is_z?: boolean;
@@ -89,7 +88,7 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     // STEP 2: GET EXISTING NFTS FROM DATABASE
     const { data: existingNfts, error: existingError } = await supabase
       .from('nfts')
-      .select('token_id, contract_address, rarity, bonus_points, metadata, is_shiny, is_z, is_full_set')
+      .select('token_id, contract_address, rarity, metadata, is_shiny, is_z, is_full_set')
       .eq('wallet_address', walletAddress.toLowerCase());
     
     if (existingError) {
@@ -97,10 +96,6 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       // Continue despite error to try recovery
     } else {
       console.log(`🔍 EXISTING DB STATE: Found ${existingNfts?.length || 0} NFTs in database for wallet ${walletAddress.toLowerCase()}`);
-      if (existingNfts && existingNfts.length > 0) {
-        const totalBonusPoints = existingNfts.reduce((sum, nft) => sum + (nft.bonus_points || 0), 0);
-        console.log(`⚠️ DB STATE DETAILS: Total bonus points before sync: ${totalBonusPoints}`);
-      }
     }
     
     // Create a map of existing NFTs for easy lookup
@@ -120,15 +115,9 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     for (const tokenId of blockchainNFTIds) {
       if (!existingNftsMap.has(tokenId)) {
         nftsToAdd.push(tokenId);
-      } else {
-        // Only update if needed (e.g., if bonus points changed)
-        const existingNft = existingNftsMap.get(tokenId);
-        const currentPoints = getNFTPointsSafe(String(tokenId), 0);
-        
-        if (existingNft.bonus_points !== currentPoints) {
-          nftsToUpdate.push(tokenId);
-        }
       }
+      // Note: No need to check for updates since we removed bonus_points column
+      // NFT data is now calculated dynamically from rarity
     }
     
     // Find NFTs to remove (in DB but not in blockchain)
@@ -158,8 +147,8 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       }
     }
     
-    // STEP 5: PROCESS ADDITIONS AND UPDATES
-    const nftsToProcess = [...nftsToAdd, ...nftsToUpdate];
+    // STEP 5: PROCESS ADDITIONS ONLY (no updates needed)
+    const nftsToProcess = nftsToAdd;
     const processedNfts: Array<{
       tokenId: number;
       metadata?: NFTMetadata;
@@ -237,7 +226,6 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
             is_shiny: isShiny,
             is_z: isZ,
             is_full_set: isFullSet,
-            bonus_points: bonusPoints,
             metadata: metadata || {},
             updated_at: new Date().toISOString()
           },
@@ -280,7 +268,7 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       returnNfts = existingNfts.map(nft => ({
         tokenId: Number(nft.token_id),
         metadata: nft.metadata,
-        bonusPoints: nft.bonus_points || 0,
+        bonusPoints: getNFTPointsSafe(String(nft.token_id), 0),
         rarity: nft.rarity,
         isShiny: nft.is_shiny || false,
         isZ: nft.is_z || false,
@@ -323,7 +311,7 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     // Get all of the user's NFTs
     const { data: nfts, error } = await supabase
       .from('nfts')
-      .select('token_id, contract_address, bonus_points')
+      .select('token_id, contract_address')
       .eq('wallet_address', walletAddress.toLowerCase());
     
     if (error) throw error;
@@ -404,17 +392,12 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
       listedNFTsMap[tokenId] = result.isListed;
       
       // Obtener puntos del mapa precalculado para conteo
-      const bonusPoints = getNFTPointsSafe(tokenId, result.nft.bonus_points || 0);
+      const bonusPoints = getNFTPointsSafe(tokenId, 0);
       
       // Si está disponible, añadir a elegibles
       if (!result.isUnavailable) {
-        // Actualizar los puntos en el objeto NFT
-        const nftWithUpdatedPoints = {
-          ...result.nft,
-          bonus_points: bonusPoints
-        };
-        
-        eligibleNfts.push(nftWithUpdatedPoints);
+        // No need to update bonus_points since we removed it from the interface
+        eligibleNfts.push(result.nft);
         totalPoints += bonusPoints;
         
         console.log(`✅ NFT ${result.nft.contract_address}:${tokenId} AVAILABLE with ${bonusPoints} points`);
