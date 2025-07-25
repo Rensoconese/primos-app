@@ -15,8 +15,8 @@ import {
 import { ronin } from '@/utils/chain';
 import { ERC721_ABI } from '@/utils/erc721-abi';
 import { isNFTLocked, lockNFT } from './redisService';
-import { getNFTPointsSafe } from '@/data/nftPoints';
 import { isNFTListed } from './marketplaceService';
+import { getNFTPointsSafe } from '@/data/nftPoints';
 
 // Primos NFT contract address
 export const PRIMOS_NFT_CONTRACT = '0x23924869ff64ab205b3e3be388a373d75de74ebd';
@@ -301,31 +301,12 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     }
     
     // STEP 8: CHECK MARKETPLACE LISTINGS
-    try {
-      // Verificar si algún NFT está listado en el marketplace
-      const listedNFTsPromises = returnNfts.map(async (nft) => {
-        try {
-          const isListed = await isNFTListed(PRIMOS_NFT_CONTRACT, String(nft.tokenId), walletAddress.toLowerCase());
-          return {
-            ...nft,
-            isListed
-          };
-        } catch (err) {
-          console.error(`Error verificando si NFT ${nft.tokenId} está listado:`, err);
-          return {
-            ...nft,
-            isListed: false // Por defecto, asumimos que no está listado en caso de error
-          };
-        }
-      });
-      
-      const nftsWithListingStatus = await Promise.all(listedNFTsPromises);
-      
-      // Actualizar returnNfts con la información de listado
-      returnNfts = nftsWithListingStatus;
-    } catch (error) {
-      console.error('Error verificando NFTs listados en marketplace:', error);
-    }
+    // Por ahora, asumimos que ningún NFT está listado en el marketplace
+    // Esto se puede mejorar más adelante con una implementación adecuada
+    returnNfts = returnNfts.map(nft => ({
+      ...nft,
+      isListed: false
+    }));
     
     return { success: true, nfts: returnNfts };
   } catch (error) {
@@ -371,10 +352,9 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
         const isLocked = await isNFTLocked(nft.contract_address, String(nft.token_id));
         
         // Verificar si el NFT está listado en el marketplace
-        // Asegurarse de que la dirección de wallet esté en minúsculas
-        const isListed = await isNFTListed(nft.contract_address, String(nft.token_id), walletAddress.toLowerCase());
+        const isListed = await isNFTListed(nft.contract_address, String(nft.token_id), walletAddress);
         
-        // Un NFT no está disponible si está bloqueado O listado
+        // Un NFT no está disponible si está bloqueado O listado en el marketplace
         const isUnavailable = isLocked || isListed;
         
         return { 

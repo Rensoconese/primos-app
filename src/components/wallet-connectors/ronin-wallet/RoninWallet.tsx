@@ -5,11 +5,17 @@ import { createWalletClient, createPublicClient, custom, http, type WalletClient
 import { useConnectorStore } from '@/hooks/useConnectorStore';
 import { ronin } from '@/utils/chain';
 
-// Tipos para window.ronin
+// Tipos para window.ronin y window.ethereum
 declare global {
   interface Window {
     ronin?: {
       provider: any;
+    };
+    ethereum?: {
+      isMetaMask?: boolean;
+      request?: (args: any) => Promise<any>;
+      on?: (event: string, handler: (...args: any[]) => void) => void;
+      removeListener?: (event: string, handler: (...args: any[]) => void) => void;
     };
   }
 }
@@ -40,19 +46,39 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
     return typeof window !== 'undefined' && typeof window.ronin !== 'undefined';
   };
 
-  // Conectar wallet
-  const connectWallet = async () => {
+  // Detectar si MetaMask está activa (puede causar conflictos)
+  const isMetaMaskActive = (): boolean => {
+    return typeof window !== 'undefined' && 
+           typeof window.ethereum !== 'undefined' && 
+           window.ethereum.isMetaMask === true;
+  };
+
+  // Conectar wallet con reintentos
+  const connectWallet = async (retryCount = 0) => {
     setConnecting(true);
     setError(null);
     
+    // Verificar conflicto con MetaMask
+    if (isMetaMaskActive() && !isRoninWalletInstalled()) {
+      setError('Por favor desactiva MetaMask e instala Ronin Wallet para conectarte a esta aplicación');
+      window.open('https://wallet.roninchain.com/', '_blank');
+      setConnecting(false);
+      return;
+    }
+    
     if (!isRoninWalletInstalled()) {
-      setError('Ronin Wallet is not installed');
+      setError('Ronin Wallet no está instalada. Por favor instálala para continuar.');
       window.open('https://wallet.roninchain.com/', '_blank');
       setConnecting(false);
       return;
     }
     
     try {
+      // Esperar un momento si es un reintento
+      if (retryCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+      
       // Crear el cliente Viem para wallet
       const walletClient = createWalletClient({
         chain: ronin,
@@ -65,8 +91,13 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
         transport: custom(window.ronin!.provider)
       });
       
-      // Solicitar acceso a las cuentas
-      const addresses = await walletClient.requestAddresses();
+      // Solicitar acceso a las cuentas con timeout
+      const addressPromise = walletClient.requestAddresses();
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout al conectar')), 30000)
+      );
+      
+      const addresses = await Promise.race([addressPromise, timeoutPromise]);
       
       if (addresses.length > 0) {
         const address = addresses[0];
@@ -95,11 +126,27 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
           }
         }
       } else {
-        setError('Could not get wallet address');
+        setError('No se pudo obtener la dirección de la wallet. Por favor intenta de nuevo.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error connecting to wallet:', err);
-      setError('Error connecting to wallet');
+      
+      // Mensajes de error específicos
+      if (err.message?.includes('User rejected')) {
+        setError('Conexión rechazada. Por favor acepta la conexión en Ronin Wallet.');
+      } else if (err.message?.includes('Timeout')) {
+        setError('Tiempo de espera agotado. Por favor verifica que Ronin Wallet esté desbloqueada.');
+      } else if (err.message?.includes('disconnect')) {
+        setError('La wallet se desconectó. Por favor reconecta tu Ronin Wallet.');
+      } else if (retryCount < 2) {
+        // Reintentar hasta 2 veces
+        console.log(`Reintentando conexión... (intento ${retryCount + 1})`);
+        setError('Error al conectar. Reintentando...');
+        setTimeout(() => connectWallet(retryCount + 1), 1000);
+        return;
+      } else {
+        setError('Error al conectar con Ronin Wallet. Por favor recarga la página e intenta de nuevo.');
+      }
     } finally {
       setConnecting(false);
     }
@@ -250,7 +297,7 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
       {!isConnected ? (
         <>
           <button 
-            onClick={connectWallet} 
+            onClick={() => connectWallet()} 
             disabled={connecting}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:bg-blue-300"
           >
@@ -258,8 +305,21 @@ const RoninWallet: React.FC<RoninWalletProps> = ({ onConnect, onDisconnect }) =>
           </button>
           
           {error && (
-            <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-md text-sm absolute right-0 mt-8">
-              {error}
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm max-w-md">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="font-medium">Error de conexión</p>
+                  <p className="mt-1">{error}</p>
+                  {error.includes('MetaMask') && (
+                    <p className="mt-2 text-xs">
+                      Esta aplicación requiere Ronin Wallet, no MetaMask.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </>

@@ -33,13 +33,15 @@ yarn-error.log*
 # Vercel
 .vercel
 
+# MCP configuration (contains sensitive tokens)
+.mcp.json
+
 # Carpeta duplicada
 /Primos_CheckIn
 
 # Archivos de respaldo
 updated_*
 # Archivos con información sensible
-/memory-bank/
 .clinerules
 
 # Scripts de generación de NFT Points (solo desarrollo)
@@ -62,3 +64,12 @@ src/components/MarketplaceTest/
 src/app/api/test-*/
 src/app/api/redis-stats/
 src/app/api/redis-clear/
+
+# Documentación de desarrollo (contiene información sensible)
+CLAUDE.md
+PDR.md
+/docs/
+/logs/
+
+# Build info
+tsconfig.tsbuildinfo

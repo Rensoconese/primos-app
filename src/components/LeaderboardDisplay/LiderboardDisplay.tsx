@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/utils/supabase';
 import { useConnectorStore } from '@/hooks/useConnectorStore';
+import { useLeaderboard, useLeaderboardUser, useInvalidateLeaderboard } from '@/hooks/useLeaderboard';
 
 interface LeaderboardDisplayProps {
   refreshTrigger?: number;
@@ -12,82 +12,64 @@ interface LeaderboardEntry {
   wallet_address: string;
   user_name: string | null;
   tokens_claimed: number;
-  points_earned: number; // keeping in interface though not displayed
+  points_earned: number;
   best_streak: number;
+  current_streak: number;
+  last_active: string;
   nft_count: number;
   rank?: number;
 }
 
 const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => {
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [userEntry, setUserEntry] = useState<LeaderboardEntry | null>(null);
   const { account } = useConnectorStore();
   
-  // Función para obtener datos del leaderboard usando el endpoint de API
-  const fetchLeaderboard = async () => {
-    setLoading(true);
-    try {
-      // Construir la URL con el parámetro wallet_address si el usuario está conectado
-      let url = '/api/get-leaderboard';
-      if (account) {
-        url += `?wallet_address=${account.toLowerCase()}`;
-      }
-      
-      // Añadir un parámetro de timestamp para evitar caché
-      const timestamp = new Date().getTime();
-      url += `${url.includes('?') ? '&' : '?'}t=${timestamp}`;
-      
-      console.log(`Fetching leaderboard data from: ${url}`);
-      
-      // Realizar la petición al endpoint con cache: 'no-store' para evitar caché
-      const response = await fetch(url, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch leaderboard');
-      }
-      
-      const result = await response.json();
-      console.log('Leaderboard data received:', result);
-      
-      // Actualizar el estado con los datos recibidos
-      setLeaderboardData(result.data || []);
-      setUserEntry(result.userEntry);
-      
-      // Log para depuración
-      if (account) {
-        const userInTop = result.data?.find((entry: any) => 
-          entry.wallet_address.toLowerCase() === account.toLowerCase()
-        );
-        
-        if (userInTop) {
-          console.log(`User found in top leaderboard: tokens_claimed=${userInTop.tokens_claimed}`);
-        } else if (result.userEntry) {
-          console.log(`User entry (not in top): tokens_claimed=${result.userEntry.tokens_claimed}, rank=${result.userEntry.rank}`);
-        } else {
-          console.log('User not found in leaderboard data');
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching leaderboard:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Usar el hook de TanStack Query para obtener datos del leaderboard
+  const { data: leaderboardResponse, isLoading, error, refetch } = useLeaderboard({
+    page: 1,
+    pageSize: 100, // Mostrar top 100
+    sortBy: 'points',
+    filter: 'all'
+  });
   
-  // Efecto para cargar datos cuando cambia account o refreshTrigger
+  // Hook para obtener datos específicos del usuario
+  const { data: userRankData } = useLeaderboardUser(account);
+  const invalidateLeaderboard = useInvalidateLeaderboard();
+  
+  // Estado local para mantener compatibilidad con el componente existente
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [userEntry, setUserEntry] = useState<LeaderboardEntry | null>(null);
+  
+  // Actualizar datos cuando cambie la respuesta del hook
   useEffect(() => {
-    fetchLeaderboard();
-    // Ya no actualizamos cada minuto, solo cuando cambia refreshTrigger o account
-  }, [account, refreshTrigger]); // Re-run when account or refreshTrigger changes
+    if (leaderboardResponse?.data) {
+      // Mapear los datos al formato esperado por el componente
+      const mappedData = leaderboardResponse.data.map((entry, index) => ({
+        ...entry,
+        user_name: entry.user_name || null,
+        rank: index + 1
+      }));
+      setLeaderboardData(mappedData);
+    }
+  }, [leaderboardResponse]);
+  
+  // Actualizar datos del usuario cuando cambien
+  useEffect(() => {
+    if (userRankData) {
+      setUserEntry({
+        ...userRankData,
+        user_name: userRankData.user_name || null
+      });
+    } else {
+      setUserEntry(null);
+    }
+  }, [userRankData]);
+  
+  // Invalidar y refrescar cuando cambie el trigger
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      invalidateLeaderboard();
+    }
+  }, [refreshTrigger, invalidateLeaderboard]);
   
   // Helper function to render a table row
   const renderTableRow = (entry: LeaderboardEntry, index: number, isCurrentUser: boolean = false) => {
@@ -129,8 +111,10 @@ const LeaderboardDisplay = ({ refreshTrigger = 0 }: LeaderboardDisplayProps) => 
     <div className="bg-gray-800 rounded-lg shadow-md p-6 text-white">
       <h2 className="text-2xl font-bold mb-4 uppercase">Top Fire Dust Collectors</h2>
       
-      {loading ? (
+      {isLoading ? (
         <div className="text-center py-4">Loading leaderboard data...</div>
+      ) : error ? (
+        <div className="text-center py-4 text-red-400">Error loading leaderboard. Please try again later.</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full bg-gray-700 text-white">

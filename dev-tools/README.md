@@ -4,28 +4,26 @@ This directory contains test files and development tools that are not required f
 
 ## Structure
 
-- `scripts/`: Development scripts
-  - `script-generate-nft-points-map.ts`: Script to generate NFT points mapping
-  - `generate-nft-points.js`: JavaScript version of the NFT points generator
+```
+dev-tools/
+├── api/                              # Test API endpoints
+│   └── test-redis-simple/           # Simplified Redis test (uses standard env vars only)
+├── scripts/                         # Development and maintenance scripts
+│   ├── database/                    # Database-related scripts
+│   │   └── reset_tables.sql        # Reset all tables to initial state
+│   ├── check_project_structure.sh   # Verify project structure
+│   ├── fix-leaderboard.js          # Fix leaderboard discrepancies
+│   ├── fix-user-leaderboard.sh     # Fix specific user's leaderboard entry
+│   ├── generate-nft-points.js      # Generate NFT points with DB integration
+│   ├── generateNFTPoints.ts        # TypeScript NFT points generator
+│   ├── manage-test-files.sh        # Manage test files
+│   ├── script-generate-nft-points-map.ts  # Generate NFT points mapping
+│   └── update-nft-bonus-points.ts  # Update NFT bonus points in database
+└── README.md                        # This file
+```
 
-- `marketplace-test/`: Test files for the marketplace functionality
-  - `page.tsx`: Page component for the marketplace test
-  - `schema.json`: GraphQL schema for the marketplace test
-
-- `components/`: Test components
-  - `MarketplaceTest/`: Components for testing marketplace functionality
-    - `MarketplaceTest.tsx`: Main component for the marketplace test
-
-- `api/`: Test API endpoints
-  - `test-marketplace/`: Endpoint for testing marketplace functionality
-  - `test-redis/`: Endpoint for testing Redis functionality
-  - `test-redis-only/`: Endpoint for testing Redis-only functionality
-  - `test-date-service/`: Endpoint for testing date service
-  - `redis-stats/`: Endpoint for viewing Redis statistics
-  - `redis-clear/`: Endpoint for clearing Redis cache
-
-- `fix-leaderboard.js`: Script to verify and correct discrepancies between the `rewards` table and the `leaderboard` table
-- `fix-user-leaderboard.sh`: Shell script to run the leaderboard fix for a specific wallet address
+**Note**: The following endpoints are available in the main application at `src/app/api/`:
+- `test-marketplace/`, `test-redis/`, `test-date-service/`, `redis-stats/`, `redis-clear/`
 
 ## Usage
 

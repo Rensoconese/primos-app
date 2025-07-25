@@ -20,6 +20,7 @@ import {
 import { ronin } from '@/utils/chain';
 import { getSecondsUntilNextUTCMidnight, formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
 import { updateLeaderboardStreak } from '@/services/leaderboardService';
+import { useUserData, useInvalidateUserData } from '@/hooks/useUserData';
 
 interface ContractInteractionProps {
   onCheckInSuccess?: () => void;
@@ -81,6 +82,10 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
   // Referencia para el cliente viem
   const [walletClient, setWalletClient] = useState<WalletClient | null>(externalWalletClient || null);
   const [publicClient, setPublicClient] = useState<PublicClient | null>(externalPublicClient || null);
+  
+  // Usar el hook de TanStack Query para obtener datos del usuario
+  const { data: userDataResponse, isLoading: userDataLoading, error: userDataError } = useUserData(userAddress);
+  const invalidateUserData = useInvalidateUserData();
 
   // Function to get network name from chain ID
   const getNetworkName = (chainId: number): string => {
@@ -122,34 +127,23 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     }
   }, [externalWalletClient, externalPublicClient]);
 
+  // Actualizar streak cuando cambian los datos del usuario
   useEffect(() => {
-    // Load streak data from API instead of direct Supabase access
-    const loadStreakData = async () => {
-      if (!userAddress) return;
-      
-      try {
-        console.log('Fetching streak data from API...');
-        const response = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
-        const result = await response.json();
-        
-        if (result.error) {
-          console.error('Error loading streak data:', result.error);
-          return;
-        }
-        
-        if (result.data) {
-          setStreak(result.data.current_streak || 0);
-        } else {
-          // User not found, initialize streak to 0
-          setStreak(0);
-        }
-      } catch (err) {
-        console.error('Error loading user streak data:', err);
-      }
-    };
-    
-    loadStreakData();
-  }, [userAddress, refreshTrigger]); // Added refreshTrigger as a dependency
+    if (userDataResponse?.data) {
+      setStreak(userDataResponse.data.current_streak || 0);
+      setStreakBroken(userDataResponse.data.streak_broken || false);
+    } else if (!userDataLoading && !userDataError) {
+      // User not found, initialize streak to 0
+      setStreak(0);
+    }
+  }, [userDataResponse, userDataLoading, userDataError]);
+  
+  // Refresh data when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger && userAddress) {
+      invalidateUserData(userAddress);
+    }
+  }, [refreshTrigger, userAddress]); // Remover invalidateUserData de dependencies
 
   // Cargar datos del contrato cuando cambia el cliente público
   useEffect(() => {
@@ -205,51 +199,46 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
         await new Promise(resolve => setTimeout(resolve, 300));
         
         try {
-          // Obtener datos del usuario para verificar el último check-in
-          try {
-            // Primero consultamos a la API para obtener datos del usuario
-            const userResponse = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
-            const userData = await userResponse.json();
+          // Los datos del usuario ya vienen del hook useUserData
+          if (userDataResponse?.data) {
+            // Check if streak is broken during initial load
+            // Only show streak broken message if streak is still 0
+            if (userDataResponse.data.streak_broken && userDataResponse.data.current_streak === 0) {
+              console.log("Streak broken detected during initial load");
+              // Update URL to trigger streak broken notification in NFTDisplay
+              const url = new URL(window.location.href);
+              url.searchParams.set('check_in', 'true');
+              url.searchParams.set('streak_broken', 'true');
+              window.history.pushState({}, '', url.toString());
+              
+              // Set streakBroken state
+              if (isMounted) setStreakBroken(true);
+            } else if (userDataResponse.data.current_streak > 0) {
+              // If streak is positive, clear the streakBroken flag
+              if (isMounted) setStreakBroken(false);
+            }
             
-            if (userData.data) {
-              // Check if streak is broken during initial load
-              // Only show streak broken message if streak is still 0
-              if (userData.data.streak_broken && userData.data.current_streak === 0) {
-                console.log("Streak broken detected during initial load");
-                // Update URL to trigger streak broken notification in NFTDisplay
-                const url = new URL(window.location.href);
-                url.searchParams.set('check_in', 'true');
-                url.searchParams.set('streak_broken', 'true');
-                window.history.pushState({}, '', url.toString());
-                
-                // Set streakBroken state
-                if (isMounted) setStreakBroken(true);
-              } else if (userData.data.current_streak > 0) {
-                // If streak is positive, clear the streakBroken flag
-                if (isMounted) setStreakBroken(false);
-              }
-              
-              // Log the can_checkin value for debugging
-              console.log("Can check-in value from API:", userData.data.can_checkin);
-              console.log("Hours remaining:", userData.data.hours_remaining);
-              console.log("Checked in today UTC:", userData.data.checked_in_today_utc);
-              
-              if (userData.data.checked_in_today_utc === true) {
-                console.log("Usuario ya hizo check-in hoy (UTC) según la base de datos");
-                if (isMounted) setHasCheckedIn(true);
-              } else if (!userData.data.can_checkin) {
-                // Use can_checkin property from API instead of hours_since_last_checkin
-                console.log(`Debe esperar ${userData.data.hours_remaining} horas más para hacer check-in`);
-                if (isMounted) {
-                  setError(`You must wait ${userData.data.hours_remaining} hours before checking in again`);
+            // Log the can_checkin value for debugging
+            console.log("Can check-in value from API:", userDataResponse.data.can_checkin);
+            console.log("Hours remaining:", userDataResponse.data.hours_remaining);
+            console.log("Checked in today UTC:", userDataResponse.data.checked_in_today_utc);
+            
+            if (userDataResponse.data.checked_in_today_utc === true) {
+              console.log("Usuario ya hizo check-in hoy (UTC) según la base de datos");
+              if (isMounted) setHasCheckedIn(true);
+            } else if (!userDataResponse.data.can_checkin) {
+              // Use can_checkin property from API instead of hours_since_last_checkin
+              console.log(`Debe esperar ${userDataResponse.data.hours_remaining} horas más para hacer check-in`);
+              if (isMounted) {
+                  setError(`You must wait ${userDataResponse.data.hours_remaining} hours before checking in again`);
                 }
               } else {
                 // Clear any error if the user can check in
                 if (isMounted) setError(null);
               }
               
-              if (userData.data.last_check_in) {
-                const lastCheckInDate = new Date(userData.data.last_check_in);
+              if (userDataResponse.data.last_check_in) {
+                const lastCheckInDate = new Date(userDataResponse.data.last_check_in);
                 
                 // Format the date in Spanish style
                 const dateOptions: Intl.DateTimeFormatOptions = { 
@@ -273,12 +262,12 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             } else {
               setLastCheckIn('Never');
             }
-          } catch (apiErr) {
-            console.error('Error al obtener datos de usuario desde API:', apiErr);
-            
-            // Si falla la API, intentamos obtener del contrato como fallback
-            let lastCheckInTime;
-            try {
+        } catch (apiErr) {
+          console.error('Error al obtener datos de usuario desde API:', apiErr);
+          
+          // Si falla la API, intentamos obtener del contrato como fallback
+          let lastCheckInTime;
+          try {
               lastCheckInTime = await retry(async () => {
                 return await publicClient.readContract({
                   address: contract.address as Address,
@@ -322,10 +311,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
                 setLastCheckIn('Never');
               }
             }
-          }
-        } catch (timeErr: any) {
-          console.error('Error handling last check-in time:', timeErr);
-          hasError = true;
         }
         
         // Add another small delay between calls
@@ -479,41 +464,32 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
     setError(null);
     setSuccess(null);
     
-    // Verificar con la API si el usuario ya ha hecho check-in hoy
-    try {
-      // Obtenemos los datos del usuario para verificar el último check-in
-      const userDataResponse = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
-      const userData = await userDataResponse.json();
-      
+    // Verificar con los datos del hook si el usuario ya ha hecho check-in hoy
+    if (userDataResponse?.data) {
       // Log the API response for debugging
-      console.log("API response for check-in verification:", userData.data);
+      console.log("API response for check-in verification:", userDataResponse.data);
       
-      if (userData.data) {
-        // Log the can_checkin value for debugging
-        console.log("Can check-in value from API during handleCheckIn:", userData.data.can_checkin);
-        console.log("Hours remaining during handleCheckIn:", userData.data.hours_remaining);
-        console.log("Checked in today UTC during handleCheckIn:", userData.data.checked_in_today_utc);
-        
-        // Check for UTC day verification - simplify to a single condition based on can_checkin
-        if (userData.data.checked_in_today_utc) {
-          setIsLoading(false);
-          setShowAnimation(false); // Hide animation on error
-          setError('You have already checked in today (UTC). Please try again tomorrow.');
-          setHasCheckedIn(true);
-          return;
-        }
-        
-        // Usar la propiedad can_checkin que viene de la API
-        if (!userData.data.can_checkin) {
-          setIsLoading(false);
-          setShowAnimation(false); // Hide animation on error
-          setError(`You must wait ${userData.data.hours_remaining} hours before checking in again.`);
-          return;
-        }
+      // Log the can_checkin value for debugging
+      console.log("Can check-in value from API during handleCheckIn:", userDataResponse.data.can_checkin);
+      console.log("Hours remaining during handleCheckIn:", userDataResponse.data.hours_remaining);
+      console.log("Checked in today UTC during handleCheckIn:", userDataResponse.data.checked_in_today_utc);
+      
+      // Check for UTC day verification - simplify to a single condition based on can_checkin
+      if (userDataResponse.data.checked_in_today_utc) {
+        setIsLoading(false);
+        setShowAnimation(false); // Hide animation on error
+        setError('You have already checked in today (UTC). Please try again tomorrow.');
+        setHasCheckedIn(true);
+        return;
       }
-    } catch (verifyError) {
-      console.error('Error verificando check-in previo:', verifyError);
-      // Continuamos aunque falle la verificación
+      
+      // Usar la propiedad can_checkin que viene de la API
+      if (!userDataResponse.data.can_checkin) {
+        setIsLoading(false);
+        setShowAnimation(false); // Hide animation on error
+        setError(`You must wait ${userDataResponse.data.hours_remaining} hours before checking in again.`);
+        return;
+      }
     }
     
     try {
@@ -566,22 +542,45 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             const result = await response.json();
             
             if (!response.ok) {
+              console.error('Check-in API error:', result);
               throw new Error(result.error || 'Failed to register check-in');
             }
             
             // Check if streak was broken
             const streakBroken = result.streakBroken;
             
+            console.log('Check-in API response:', {
+              success: result.success,
+              streakBroken: result.streakBroken,
+              currentStreak: result.user?.current_streak,
+              pointsEarned: result.points_earned,
+              multiplier: result.multiplier
+            });
+            
             // Ya no necesitamos actualizar los parámetros de URL para el streak roto
             // ya que el mensaje se muestra directamente en el componente de streak
             
             // Actualizar la interfaz con la información de puntos
-            setSuccess(`Successfully checked in! `);
+            const pointsMessage = result.points_earned > 0 ? 
+              `Successfully checked in! You earned ${result.points_earned} points with a ${result.multiplier}x multiplier!` :
+              `Successfully checked in!`;
+            setSuccess(pointsMessage);
+            
+            // Actualizar el streak localmente de inmediato
+            if (result.user?.current_streak !== undefined) {
+              setStreak(result.user.current_streak);
+            }
+            
+            // Marcar que ya se hizo check-in hoy
+            setHasCheckedIn(true);
             
             // Actualizar el leaderboard si tenemos la dirección del usuario
             if (userAddress) {
-              await updateLeaderboardStreak(userAddress, checkInCount);
+              await updateLeaderboardStreak(userAddress, result.user?.current_streak || checkInCount);
             }
+            
+            // Invalidar los datos de usuario para forzar un refresh
+            await invalidateUserData(userAddress);
             
             // Llamar al callback si existe
             if (onCheckInSuccess) {

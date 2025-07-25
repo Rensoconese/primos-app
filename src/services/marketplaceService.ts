@@ -55,7 +55,6 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
     }
     
     const isListed = data.isListed || false;
-    
     console.log(`NFT ${tokenId} - Estado en API: ${isListed ? 'Listado' : 'No listado'}`);
     
     return isListed;

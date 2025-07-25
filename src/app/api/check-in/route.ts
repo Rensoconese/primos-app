@@ -168,12 +168,21 @@ if (listedNFTsCount > 0) {
       
     console.log('Datos del leaderboard actuales:', leaderboardData);
     
-    // Actualizar el leaderboard con la información correcta de streak
+    // Obtener el número total de NFTs del usuario desde la base de datos
+    const { data: allUserNfts } = await supabase
+      .from('nfts')
+      .select('token_id')
+      .eq('wallet_address', wallet_address.toLowerCase());
+    
+    const totalNFTCount = allUserNfts?.length || 0;
+    
+    // Actualizar el leaderboard con la información correcta de streak y NFT count
     await updateLeaderboard(wallet_address, {
       best_streak: user.max_streak,
       current_streak: user.current_streak,
       points_earned: pointsEarned + (user.total_points || 0),
       last_active: new Date().toISOString(),
+      nft_count: totalNFTCount,
       // Conservar tokens_claimed si existe, no lo actualizamos aquí
       tokens_claimed: leaderboardData?.tokens_claimed || 0
     });

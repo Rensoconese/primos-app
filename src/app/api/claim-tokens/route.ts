@@ -18,6 +18,7 @@ import {
   type TransactionRequest
 } from 'viem';
 import { ronin } from '@/utils/chain';
+import { getRedisClient } from '@/services/redisService';
 
 // Configuración
 const TOKEN_CONTRACT_ADDRESS = '0xE3a334D6b7681D0151b81964CAf6353905e24B1b' as Address; // Fire Dust
@@ -96,12 +97,15 @@ async function getUserTotalClaimedTokens(walletAddress: string, supabase: any) {
 export async function POST(request: Request) {
   console.log('Iniciando proceso de reclamación de tokens (endpoint simplificado)...');
   
+  let walletAddress: string | undefined;
+  
   try {
     const supabase = await createClient();
     
     // Extraer datos del request
     const body = await request.json();
-    const { walletAddress, amount } = body;
+    walletAddress = body.walletAddress;
+    const { amount } = body;
     
     console.log('Datos de la solicitud:', { walletAddress, amount });
     
@@ -118,6 +122,43 @@ export async function POST(request: Request) {
         { error: 'Cantidad inválida' },
         { status: 400 }
       );
+    }
+
+    // PROTECCIÓN CONTRA DOBLE CLAIM
+    const redisClient = getRedisClient();
+    const claimKey = `claim:lock:${walletAddress.toLowerCase()}`;
+    
+    if (redisClient) {
+      try {
+        // Intentar establecer un lock con expiración de 5 minutos
+        const lockResult = await redisClient.set(claimKey, Date.now().toString(), {
+          nx: true, // Solo si no existe
+          ex: 300   // 5 minutos de expiración
+        });
+        
+        if (lockResult !== 'OK') {
+          // Ya existe un claim en progreso
+          const existingLock = await redisClient.get(claimKey);
+          const lockTime = existingLock ? parseInt(existingLock as string) : 0;
+          const timeSinceLock = Date.now() - lockTime;
+          
+          console.log(`Doble claim prevenido para wallet ${walletAddress}. Lock activo por ${timeSinceLock}ms`);
+          
+          return NextResponse.json(
+            { 
+              error: 'Ya hay una reclamación en progreso', 
+              details: 'Por favor espera a que termine la transacción anterior antes de intentar nuevamente',
+              retryAfter: Math.max(0, 300 - Math.floor(timeSinceLock / 1000))
+            },
+            { status: 429 } // Too Many Requests
+          );
+        }
+        
+        console.log(`Lock de claim establecido para wallet ${walletAddress}`);
+      } catch (redisError) {
+        console.error('Error al establecer lock en Redis:', redisError);
+        // Continuar sin lock si Redis falla
+      }
     }
 
     // Verificar que el usuario tenga suficientes puntos
@@ -411,6 +452,17 @@ export async function POST(request: Request) {
         });
         
         console.log('Proceso de reclamación completado con éxito');
+        
+        // Liberar el lock de claim
+        if (redisClient) {
+          try {
+            await redisClient.del(claimKey);
+            console.log(`Lock de claim liberado para wallet ${walletAddress}`);
+          } catch (unlockError) {
+            console.error('Error al liberar lock:', unlockError);
+          }
+        }
+        
         return NextResponse.json({
           success: true,
           txHash: txHash,
@@ -431,28 +483,31 @@ export async function POST(request: Request) {
         console.log('Implementando mecanismo de fallback debido a fallo en la transacción');
         
         try {
-          // Registrar recompensa pendiente
+          // Registrar recompensa pendiente en la nueva tabla
           const { error: pendingError } = await supabase
-            .from('pending_rewards')
+            .from('checkin_pending_rewards')
             .insert({
               user_id: userData.id,
               wallet_address: walletAddress.toLowerCase(),
               amount: Number(tokenAmount),
+              points_to_deduct: Number(amount),
               status: 'pending',
               error_details: error.message || 'Error desconocido',
-              created_at: new Date().toISOString()
+              retry_count: 0
             });
             
           if (pendingError) {
             console.error('Error al registrar recompensa pendiente:', pendingError);
           } else {
-            console.log('Recompensa pendiente registrada correctamente');
+            console.log('Recompensa pendiente registrada correctamente en checkin_pending_rewards');
             
             // Devolver un mensaje más amigable al usuario
+            // NO liberar el lock aquí para evitar doble procesamiento mientras está pendiente
             return NextResponse.json({
-              error: 'Procesamiento de transacción retrasado',
-              details: 'Tu solicitud ha sido registrada pero no pudo procesarse inmediatamente. Los tokens serán enviados a tu wallet pronto.',
+              error: 'Tu claim está siendo procesado',
+              details: 'Tu solicitud ha sido registrada. Un administrador procesará tu claim manualmente en las próximas horas.',
               fallback_activated: true,
+              pending: true,
               code: error.code || 'UNKNOWN'
             }, { status: 202 }); // 202 Accepted
           }
@@ -460,7 +515,16 @@ export async function POST(request: Request) {
           console.error('Error en el mecanismo de fallback:', fallbackError);
         }
         
-        // Si todo falla, devolver error original
+        // Si todo falla, liberar el lock y devolver error original
+        if (redisClient) {
+          try {
+            await redisClient.del(claimKey);
+            console.log(`Lock de claim liberado por error para wallet ${walletAddress}`);
+          } catch (unlockError) {
+            console.error('Error al liberar lock:', unlockError);
+          }
+        }
+        
         return NextResponse.json(
           { error: error.message || 'Error en la transferencia' },
           { status: 500 }
@@ -470,6 +534,16 @@ export async function POST(request: Request) {
     } catch (networkError: any) {
       console.error('Error al conectar con la red Ronin:', networkError);
       logDetailedError(networkError, 'Network Connection');
+      
+      // Liberar el lock antes de devolver el error
+      if (redisClient) {
+        try {
+          await redisClient.del(claimKey);
+          console.log(`Lock de claim liberado por error de red para wallet ${walletAddress}`);
+        } catch (unlockError) {
+          console.error('Error al liberar lock:', unlockError);
+        }
+      }
       
       return NextResponse.json(
         { 
@@ -483,6 +557,18 @@ export async function POST(request: Request) {
     
   } catch (error: any) {
     console.error('Error general:', error);
+    
+    // Liberar el lock si existe
+    if (getRedisClient()) {
+      const claimKey = `claim:lock:${walletAddress?.toLowerCase() || ''}`;
+      try {
+        await getRedisClient()?.del(claimKey);
+        console.log('Lock de claim liberado por error general');
+      } catch (unlockError) {
+        console.error('Error al liberar lock:', unlockError);
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Error del servidor', details: error.message || 'Error desconocido' },
       { status: 500 }

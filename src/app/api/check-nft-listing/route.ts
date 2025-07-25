@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PRIMOS_NFT_CONTRACT, clearListingCache } from '@/services/marketplaceService';
+import { PRIMOS_NFT_CONTRACT } from '@/services/marketplaceService';
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -17,16 +17,6 @@ export async function GET(req: NextRequest) {
   const lowerWalletAddress = walletAddress.toLowerCase();
   
   try {
-    // Intentar limpiar la caché solo si se solicita, pero manejar posibles errores
-    if (refresh) {
-      try {
-        await clearListingCache(walletAddress);
-      } catch (cacheError) {
-        console.error('Error al limpiar caché, continuando sin limpiar:', cacheError);
-        // Continuamos con la ejecución aunque falle la limpieza de caché
-      }
-    }
-    
     // Consultar la API GraphQL a través del proxy para obtener los NFTs del usuario
     const userNFTsQuery = `
       query {

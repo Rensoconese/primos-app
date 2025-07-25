@@ -7,8 +7,9 @@ import ContractInteraction from '@/components/ContractInteraction';
 import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet';
 import NFTDisplay from '@/components/NFTDisplay/NFTDisplay';
 import RewardsPanel from '@/components/RewardsPanel/RewardsPanel';
-import LeaderboardDisplay from '@/components/LeaderboardDisplay/LiderboardDisplay';
 import HowRewardsWorks from '@/components/NFTDisplay/HowRewardsWorks';
+import Navigation from '@/components/Navigation/Navigation';
+import MobileMenu from '@/components/MobileMenu/MobileMenu';
 import { RONIN_CHAIN_IDS } from '@/utils/contract';
 import { supabase } from '@/utils/supabase';
 
@@ -19,7 +20,6 @@ export default function Home() {
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [userDataRefresh, setUserDataRefresh] = useState<number>(0);
-  const [rewardsRefresh, setRewardsRefresh] = useState<number>(0);
   const [nftCalculationInProgress, setNftCalculationInProgress] = useState<boolean>(false);
   // Estado para el cliente de viem
   const [viemClient, setViemClient] = useState<PublicClient | null>(null);
@@ -109,9 +109,8 @@ export default function Home() {
   };
   
   // Función separada para actualizar datos después de reclamar tokens
-  // Ahora actualiza rewardsRefresh en lugar de userDataRefresh para evitar recargar NFTDisplay
   const handleRewardClaimed = useCallback(() => {
-    // Actualizar el total de puntos y el leaderboard
+    // Actualizar el total de puntos
     if (userAddress) {
       // Actualizar los datos de puntos
       const loadUserPoints = async () => {
@@ -130,9 +129,6 @@ export default function Home() {
       };
       
       loadUserPoints();
-      
-      // Actualizar rewardsRefresh para que se actualice el leaderboard sin recargar NFTDisplay
-      setRewardsRefresh(prev => prev + 1);
     }
   }, [userAddress]);
   
@@ -165,26 +161,40 @@ export default function Home() {
       
       {/* Contenido principal (encima de la capa de blur) */}
       <div style={{ position: "relative", zIndex: 1 }}>
-        <header className="bg-gray-800 shadow">
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <div className="flex items-center">
-              <img 
-                src="/images/primos_logo.png" 
-                alt="Primos Logo" 
-                style={{ width: '50px', height: 'auto' }}
-                className="mr-4"
-              />
-              <div>
-                <h1 className="text-3xl font-bold text-white uppercase">
-                  Primos Daily Check-in
-                </h1>
-                <p className="text-sm text-gray-400 mt-1">
-                  Earn rewards with daily check-ins
-                </p>
+        <header className="bg-gray-800 shadow relative">
+          <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center">
+              {/* Left side - Logo and Title */}
+              <div className="flex items-center">
+                <img 
+                  src="/images/primos_logo.png" 
+                  alt="Primos Logo" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 mr-2 sm:mr-3"
+                />
+                <div>
+                  <h1 className="text-xl font-bold text-white uppercase">
+                    Primos Daily Check-in
+                  </h1>
+                  <p className="text-xs text-gray-400 mt-1 hidden sm:block">
+                    Earn rewards with daily check-ins
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="w-auto">
-              <RoninWallet onConnect={handleConnect} onDisconnect={handleDisconnect} />
+
+              {/* Desktop Navigation */}
+              <Navigation />
+
+              {/* Right side - Wallet and Mobile Menu */}
+              <div className="flex items-center space-x-2">
+                <div className="hidden md:block">
+                  <RoninWallet onConnect={handleConnect} onDisconnect={handleDisconnect} />
+                </div>
+                <MobileMenu 
+                  userAddress={userAddress} 
+                  onDisconnect={handleDisconnect}
+                  onConnect={handleConnect}
+                />
+              </div>
             </div>
           </div>
         </header>
@@ -218,11 +228,6 @@ export default function Home() {
                     onRewardClaimed={handleRewardClaimed} 
                     provider={provider}
                   />
-                </div>
-                
-                {/* Componente de leaderboard con rewardsRefresh */}
-                <div className="md:col-span-3 mt-6">
-                  <LeaderboardDisplay refreshTrigger={rewardsRefresh} />
                 </div>
               </div>
             ) : (

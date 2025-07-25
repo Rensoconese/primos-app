@@ -80,11 +80,19 @@ const HowRewardsWorks: React.FC = () => {
                   <td className="p-1">+4</td>
                 </tr>
                 <tr>
+                  <td className="p-1">Original Z Summer</td>
+                  <td className="p-1">+4</td>
+                </tr>
+                <tr>
                   <td className="p-1">Shiny</td>
                   <td className="p-1">+7</td>
                 </tr>
                 <tr>
                   <td className="p-1">Shiny Z</td>
+                  <td className="p-1">+13</td>
+                </tr>
+                <tr>
+                  <td className="p-1">Shiny Z Summer</td>
                   <td className="p-1">+13</td>
                 </tr>
                 <tr>
