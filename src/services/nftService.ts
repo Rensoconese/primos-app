@@ -365,7 +365,8 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
           index 
         };
       } catch (err) {
-        console.error(`Error verificando NFT ${nft.contract_address}:${nft.token_id}:`, err);
+        console.error(`🚨 ERROR CRÍTICO verificando NFT ${nft.contract_address}:${nft.token_id}:`, err);
+        console.error(`⚠️  Este error podría estar causando que NFTs se marquen incorrectamente`);
         // En caso de error, asumimos que está bloqueado para evitar uso incorrecto
         return { nft, isUnavailable: true, isLocked: true, isListed: false, index };
       }

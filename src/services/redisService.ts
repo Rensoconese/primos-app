@@ -192,8 +192,11 @@ export async function isNFTLocked(contractAddress: string, tokenId: string): Pro
     }
     return isLocked;
   } catch (error) {
-    console.error(`Error verificando bloqueo de NFT ${contractAddress}:${tokenId}:`, error);
-    // En caso de error, asumimos que no está bloqueado para permitir su uso
+    console.error(`🚨 ERROR verificando bloqueo de NFT ${contractAddress}:${tokenId}:`, error);
+    // IMPORTANTE: En caso de error, retornamos false pero logeamos claramente
+    // Esto podría estar causando que NFTs bloqueados se marquen como disponibles
+    console.error(`⚠️  NFT ${tokenId} - ASUMIENDO NO BLOQUEADO POR ERROR - Esto podría ser el problema!`);
+    console.error(`⚠️  Redis no disponible o error de conexión - todos los NFTs parecerán disponibles`);
     return false;
   }
 }

@@ -59,8 +59,11 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
     
     return isListed;
   } catch (error) {
-    console.error(`Error checking if NFT is listed: ${error}`);
-    return false; // En caso de error, asumimos que no está listado
+    console.error(`🚨 ERROR checking if NFT is listed: ${error}`);
+    // IMPORTANTE: En caso de error, retornamos false pero logeamos claramente
+    // Esto podría estar causando que NFTs listados se marquen como disponibles
+    console.error(`⚠️  NFT ${tokenId} - ASUMIENDO NO LISTADO POR ERROR - Esto podría ser el problema!`);
+    return false;
   }
 }
 
