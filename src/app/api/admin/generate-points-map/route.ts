@@ -264,11 +264,25 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 }
 `;
 
-    // 6. Escribir el archivo
-    const filePath = join(process.cwd(), 'src', 'data', 'nftPoints.ts');
-    writeFileSync(filePath, fileContent, 'utf-8');
-
-    console.log(`Archivo generado exitosamente en: ${filePath}`);
+    // 6. En producción (Vercel) no podemos escribir archivos, solo mostrar el contenido
+    let filePath = '';
+    let fileWritten = false;
+    
+    try {
+      // Intentar escribir solo en desarrollo local
+      if (process.env.NODE_ENV !== 'production') {
+        filePath = join(process.cwd(), 'src', 'data', 'nftPoints.ts');
+        writeFileSync(filePath, fileContent, 'utf-8');
+        fileWritten = true;
+        console.log(`Archivo generado exitosamente en: ${filePath}`);
+      } else {
+        console.log('Producción: Archivo no escrito (Vercel es read-only)');
+        console.log('Contenido generado correctamente para descarga manual');
+      }
+    } catch (writeError) {
+      console.error('Error escribiendo archivo:', writeError);
+      // No fallar por error de escritura
+    }
 
     // 7. Registrar en auditoría
     await supabase
@@ -289,9 +303,12 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 
     return NextResponse.json({
       success: true,
-      message: 'Archivo de puntos generado exitosamente',
+      message: fileWritten ? 'Archivo de puntos generado exitosamente' : 'Mapa de puntos calculado (archivo no escrito en producción)',
       totalNFTs: totalProcessed,
-      rarityConfig: rarityPointsMap
+      totalFullSets: totalFullSets,
+      rarityConfig: rarityPointsMap,
+      fileContent: process.env.NODE_ENV === 'production' ? fileContent : undefined, // Solo enviar contenido en producción
+      filePath: fileWritten ? filePath : undefined
     });
 
   } catch (error) {
