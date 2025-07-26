@@ -24,9 +24,14 @@ export async function GET(request: Request) {
 
     const adminWallet = authHeader.replace('Bearer ', '').toLowerCase();
     
+    // Debug logging
+    console.log('🔍 Admin wallet recibida:', adminWallet);
+    console.log('📋 Lista de admins autorizados:', AUTHORIZED_ADMINS);
+    console.log('✅ ¿Está autorizada?:', AUTHORIZED_ADMINS.includes(adminWallet));
+    
     if (!AUTHORIZED_ADMINS.includes(adminWallet)) {
       return NextResponse.json(
-        { error: 'Acceso denegado' },
+        { error: `Acceso denegado para ${adminWallet}` },
         { status: 403 }
       );
     }
