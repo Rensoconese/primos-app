@@ -17,6 +17,11 @@ import { ERC721_ABI } from '@/utils/erc721-abi';
 import { isNFTLocked, lockNFT } from './redisService';
 import { isNFTListed } from './marketplaceService';
 import { getNFTPointsSafe } from '@/data/nftPoints';
+import { 
+  isRoninNetwork, 
+  processNetworkError, 
+  getNetworkErrorMessage 
+} from '@/utils/contract';
 
 // Primos NFT contract address
 export const PRIMOS_NFT_CONTRACT = '0x23924869ff64ab205b3e3be388a373d75de74ebd';
@@ -57,6 +62,14 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       chain: ronin,
       transport: custom(provider.provider || provider)
     });
+    
+    // Verify we're on the correct network
+    const currentChainId = publicClient.chain?.id;
+    if (!isRoninNetwork(currentChainId)) {
+      const errorMessage = getNetworkErrorMessage(currentChainId);
+      console.error('Network mismatch detected:', errorMessage);
+      throw new Error(errorMessage);
+    }
     
     // Crear un contrato usando viem
     const contract = {
@@ -299,6 +312,13 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     return { success: true, nfts: returnNfts };
   } catch (error) {
     console.error('Error fetching NFTs:', error);
+    
+    // Check if it's a network-related error
+    const networkError = processNetworkError(error);
+    if (networkError) {
+      return { success: false, error: new Error(networkError) };
+    }
+    
     return { success: false, error };
   }
 }

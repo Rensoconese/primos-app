@@ -7,7 +7,11 @@ import {
   safeNumberFromBigInt, 
   safeStringFromBigInt, 
   directContractCall, 
-  RONIN_CHAIN_IDS
+  RONIN_CHAIN_IDS,
+  isRoninNetwork,
+  detectChainMismatch,
+  getNetworkErrorMessage,
+  processNetworkError
 } from '@/utils/contract';
 import { 
   createWalletClient, 
@@ -453,6 +457,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
       return;
     }
     
+    // Verify network before proceeding
+    const currentChainId = publicClient.chain?.id;
+    const chainMismatch = detectChainMismatch(currentChainId);
+    
+    if (chainMismatch.isMismatch) {
+      setError(getNetworkErrorMessage(currentChainId));
+      return;
+    }
+    
     // Verificar si el usuario ya ha hecho check-in hoy
     if (hasCheckedIn) {
       setError('You have already checked in today. Please try again tomorrow.');
@@ -608,6 +621,15 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             stack: checkInError.stack
           });
           
+          // First check if it's a network-related error
+          const networkError = processNetworkError(checkInError, currentChainId);
+          if (networkError) {
+            setError(networkError);
+            setIsLoading(false);
+            setShowAnimation(false); // Hide animation on error
+            return;
+          }
+          
           // Check for common error messages
           if (checkInError.message && checkInError.message.includes("already checked in")) {
             setError("You have already checked in today. Please try again tomorrow.");
@@ -728,9 +750,12 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
           stack: txErr.stack
         });
         
-        // Check for specific error messages
-        if (txErr.message?.includes('User rejected the request')) {
-          // Mensaje amigable cuando el usuario rechaza la transacción
+        // First check if it's a network-related error
+        const networkError = processNetworkError(txErr, currentChainId);
+        if (networkError) {
+          setError(networkError);
+        } else if (txErr.message?.includes('User rejected the request')) {
+          // Friendly message when user rejects transaction
           setError('Transaction cancelled. You cancelled the check-in request.');
         } else if (txErr.code === 'CALL_EXCEPTION' || txErr.code === 'UNPREDICTABLE_GAS_LIMIT') {
           if (txErr.error?.message === 'Failed to fetch') {
@@ -748,7 +773,14 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
       }
     } catch (err: any) {
       console.error('Error checking in:', err);
-      setError('Failed to interact with contract. Check if the contract address is correct.');
+      
+      // Check if it's a network-related error
+      const networkError = processNetworkError(err, currentChainId);
+      if (networkError) {
+        setError(networkError);
+      } else {
+        setError('Failed to interact with contract. Check if the contract address is correct.');
+      }
     } finally {
       setIsLoading(false);
       setShowAnimation(false); // Hide animation when check-in completes

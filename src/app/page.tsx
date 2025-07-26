@@ -10,7 +10,7 @@ import RewardsPanel from '@/components/RewardsPanel/RewardsPanel';
 import HowRewardsWorks from '@/components/NFTDisplay/HowRewardsWorks';
 import Navigation from '@/components/Navigation/Navigation';
 import MobileMenu from '@/components/MobileMenu/MobileMenu';
-import { RONIN_CHAIN_IDS } from '@/utils/contract';
+import { RONIN_CHAIN_IDS, isRoninNetwork, detectChainMismatch } from '@/utils/contract';
 import { supabase } from '@/utils/supabase';
 
 export default function Home() {
@@ -23,6 +23,9 @@ export default function Home() {
   const [nftCalculationInProgress, setNftCalculationInProgress] = useState<boolean>(false);
   // Estado para el cliente de viem
   const [viemClient, setViemClient] = useState<PublicClient | null>(null);
+  // Estado para mostrar banner de red incorrecta
+  const [showNetworkWarning, setShowNetworkWarning] = useState<boolean>(false);
+  const [networkWarningMessage, setNetworkWarningMessage] = useState<string>('');
 
   // Función para obtener el nombre de la red
   const getNetworkName = (chainId: number): string => {
@@ -51,6 +54,16 @@ export default function Home() {
       const chainId = publicClient.chain.id;
       setNetworkName(getNetworkName(chainId));
       
+      // Verificar si está en la red correcta
+      const chainMismatch = detectChainMismatch(chainId);
+      if (chainMismatch.isMismatch) {
+        setShowNetworkWarning(true);
+        setNetworkWarningMessage(chainMismatch.message || '');
+      } else {
+        setShowNetworkWarning(false);
+        setNetworkWarningMessage('');
+      }
+      
       // Obtener dirección del usuario
       const accounts = await walletClient.getAddresses();
       if (accounts.length > 0) {
@@ -69,6 +82,8 @@ export default function Home() {
     setNetworkName('Not Connected');
     setUserAddress(null);
     setTotalPoints(0);
+    setShowNetworkWarning(false);
+    setNetworkWarningMessage('');
   };
 
   // Cargar datos del usuario usando la API en lugar de acceso directo a Supabase
@@ -145,22 +160,26 @@ export default function Home() {
       backgroundPosition: "center",
       backgroundAttachment: "fixed"
     }}>
-      {/* Capa de blur por encima del fondo */}
-      <div 
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backdropFilter: "blur(15px)",
-          WebkitBackdropFilter: "blur(15px)",
-          zIndex: 0
-        }}
-      />
+      {/* Banner de advertencia de red */}
+      {showNetworkWarning && (
+        <div className="bg-red-600 text-white p-4 text-center relative z-10">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center justify-center space-x-2">
+              <span className="text-yellow-300">⚠️</span>
+              <div className="flex-1">
+                <p className="font-bold">Wrong Network Detected</p>
+                <p className="text-sm">{networkWarningMessage}</p>
+                <p className="text-xs mt-1">
+                  To use this application, switch your wallet to Ronin Network (Chain ID: 2020)
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
-      {/* Contenido principal (encima de la capa de blur) */}
-      <div style={{ position: "relative", zIndex: 1 }}>
+      {/* Contenido principal */}
+      <div className="relative">
         <header className="bg-gray-800 shadow relative">
           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center">

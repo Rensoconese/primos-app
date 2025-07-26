@@ -61,22 +61,8 @@ export default function LeaderboardPage() {
       backgroundPosition: "center",
       backgroundAttachment: "fixed"
     }}>
-      {/* Capa de blur por encima del fondo */}
-      <div 
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backdropFilter: "blur(15px)",
-          WebkitBackdropFilter: "blur(15px)",
-          zIndex: 0
-        }}
-      />
-      
-      {/* Contenido principal (encima de la capa de blur) */}
-      <div style={{ position: "relative", zIndex: 1 }}>
+      {/* Contenido principal */}
+      <div className="relative">
         <header className="bg-gray-800 shadow relative">
           <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center">
@@ -113,7 +99,7 @@ export default function LeaderboardPage() {
           <div className="px-4 py-6 sm:px-0">
             <div className="mb-6">
               <h2 className="text-3xl font-bold text-white uppercase">Global Leaderboard</h2>
-              <p className="text-gray-300 mt-2">Compete with other trainers and climb the ranks!</p>
+              <p className="text-gray-300 mt-2">Compete with other primo miners and climb the ranks!</p>
             </div>
             
             {/* Leaderboard sin refreshTrigger */}

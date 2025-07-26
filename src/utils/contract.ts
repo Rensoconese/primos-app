@@ -551,3 +551,138 @@ export const directContractCall = async <T>(
   
   return defaultValue;
 };
+
+// Network error detection and handling utilities
+export const SUPPORTED_CHAIN_IDS = {
+  RONIN_MAINNET: 2020,
+  RONIN_TESTNET: 2021
+};
+
+export const COMMON_WRONG_NETWORKS = {
+  ETHEREUM_MAINNET: 1,
+  ETHEREUM_SEPOLIA: 11155111,
+  POLYGON: 137,
+  BSC: 56
+};
+
+/**
+ * Verifica si el chainId corresponde a una red Ronin soportada
+ */
+export const isRoninNetwork = (chainId?: number): boolean => {
+  if (!chainId) return false;
+  return chainId === SUPPORTED_CHAIN_IDS.RONIN_MAINNET || chainId === SUPPORTED_CHAIN_IDS.RONIN_TESTNET;
+};
+
+/**
+ * Detecta si hay un mismatch de red y devuelve información útil
+ */
+export const detectChainMismatch = (currentChainId?: number) => {
+  if (!currentChainId) {
+    return {
+      isMismatch: true,
+      currentNetwork: 'Unknown',
+      expectedNetwork: 'Ronin Network',
+      message: 'Unable to detect current network. Please verify your wallet is connected.'
+    };
+  }
+
+  if (isRoninNetwork(currentChainId)) {
+    return {
+      isMismatch: false,
+      currentNetwork: currentChainId === SUPPORTED_CHAIN_IDS.RONIN_MAINNET ? 'Ronin Mainnet' : 'Ronin Testnet',
+      expectedNetwork: 'Ronin Network',
+      message: null
+    };
+  }
+
+  // Determine current network name
+  let currentNetworkName = 'Unknown Network';
+  switch (currentChainId) {
+    case COMMON_WRONG_NETWORKS.ETHEREUM_MAINNET:
+      currentNetworkName = 'Ethereum Mainnet';
+      break;
+    case COMMON_WRONG_NETWORKS.ETHEREUM_SEPOLIA:
+      currentNetworkName = 'Ethereum Sepolia';
+      break;
+    case COMMON_WRONG_NETWORKS.POLYGON:
+      currentNetworkName = 'Polygon';
+      break;
+    case COMMON_WRONG_NETWORKS.BSC:
+      currentNetworkName = 'Binance Smart Chain';
+      break;
+    default:
+      currentNetworkName = `Unknown Network (Chain ID: ${currentChainId})`;
+  }
+
+  return {
+    isMismatch: true,
+    currentNetwork: currentNetworkName,
+    expectedNetwork: 'Ronin Network',
+    message: `Your wallet is connected to ${currentNetworkName}. This application requires Ronin Network (Chain ID: ${SUPPORTED_CHAIN_IDS.RONIN_MAINNET}).`
+  };
+};
+
+/**
+ * Genera un mensaje de error amigable para problemas de red
+ */
+export const getNetworkErrorMessage = (currentChainId?: number): string => {
+  const mismatch = detectChainMismatch(currentChainId);
+  
+  if (!mismatch.isMismatch) {
+    return '';
+  }
+
+  return `${mismatch.message}
+
+To switch to Ronin Network:
+1. Open your wallet settings
+2. Add or select Ronin Network
+3. Use these details:
+   • RPC URL: https://api.roninchain.com/rpc
+   • Chain ID: ${SUPPORTED_CHAIN_IDS.RONIN_MAINNET}
+   • Currency: RON
+4. Refresh the page`;
+};
+
+/**
+ * Detecta si un error está relacionado con problemas de red
+ */
+export const isNetworkRelatedError = (error: any): boolean => {
+  if (!error) return false;
+  
+  const errorMessage = error.message?.toLowerCase() || '';
+  const errorString = error.toString?.()?.toLowerCase() || '';
+  
+  // Patrones comunes de errores de red
+  const networkErrorPatterns = [
+    'does not match the target chain',
+    'chain id',
+    'network',
+    'returned no data',
+    'contract does not have the function',
+    'address is not a contract',
+    'execution reverted',
+    'call exception'
+  ];
+  
+  return networkErrorPatterns.some(pattern => 
+    errorMessage.includes(pattern) || errorString.includes(pattern)
+  );
+};
+
+/**
+ * Procesa un error y devuelve un mensaje amigable si está relacionado con la red
+ */
+export const processNetworkError = (error: any, currentChainId?: number): string | null => {
+  if (!isNetworkRelatedError(error)) {
+    return null;
+  }
+  
+  const mismatch = detectChainMismatch(currentChainId);
+  if (mismatch.isMismatch) {
+    return getNetworkErrorMessage(currentChainId);
+  }
+  
+  // If on correct network but other network errors
+  return 'Blockchain connection error. Please check your internet connection and try again.';
+};
