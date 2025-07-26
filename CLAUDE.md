@@ -251,6 +251,25 @@ npm run lint
 
 **Prevention**: Always use the generated points file; never rely on database columns for point calculation
 
+### Admin Access Issues (Fixed 2025-07-26)
+**Problem**: Wallet autorizada no puede acceder al panel admin en producción
+**Root Cause**: Lista de wallets desincronizada entre frontend y backend
+**Solution Applied**:
+1. Actualizar lista en todos los endpoints backend admin (5 archivos)
+2. Sincronizar frontend `src/config/admin.ts` con misma lista
+3. Deploy de ambos cambios a producción
+
+**Lista oficial de wallets admin**:
+- `0xce6818326aa1db5641528d11f3121a7f84b53eff` // PRIMOS_WALLET
+- `0xc1b977a826b75a87b5423bbe952104bcee885315` // MONSAI_WALLET  
+- `0x0Fc67932d60aB6194d3B93feF2d76B1e3A7d43dF` // POOL_WALLET
+- `0xf9970b9d5D6a9b0E2a1bD69A880B302941b126E6` // RENSO_WALLET
+- `0x66BE3123Fdf641070f8834Fbe66803C8559255f6` // ADMIN_WALLET
+
+**Prevention**: Mantener sincronizadas las listas en:
+- Backend endpoints: `src/app/api/admin/*/route.ts`
+- Frontend config: `src/config/admin.ts`
+
 ### NFTs Not Showing
 1. Check if sync-nfts API is working
 2. Verify RPC endpoint is responsive
