@@ -165,10 +165,28 @@ export async function POST(request: Request) {
         mappedRarity = 'original';
       }
 
-      // Solo guardar si no existe o si encontramos una rareza más específica
-      if (!tokenToRarityMap.has(tokenId) || mappedRarity !== 'original') {
-        tokenToRarityMap.set(tokenId, mappedRarity);
-      }
+      // Guardar la rareza mapeada (siempre sobrescribir con la rareza detectada)
+      tokenToRarityMap.set(tokenId, mappedRarity);
+    });
+
+    // Debug: mostrar estadísticas del mapeo de rareza
+    console.log(`✅ Mapeo de rareza completado:`);
+    console.log(`Total NFTs únicos procesados: ${uniqueTokenIds.size}`);
+    console.log(`Total NFTs con rareza mapeada: ${tokenToRarityMap.size}`);
+    
+    // Contar por tipo de rareza
+    const rarityStats: Record<string, number> = {};
+    for (const rarity of tokenToRarityMap.values()) {
+      rarityStats[rarity] = (rarityStats[rarity] || 0) + 1;
+    }
+    console.log('Estadísticas de rareza:', rarityStats);
+
+    // Debug: verificar algunos NFTs específicos
+    const sampleTokens = [1, 20, 35, 100, 500, 1000, 2228];
+    console.log('🔍 Muestra de NFTs mapeados:');
+    sampleTokens.forEach(tokenId => {
+      const rarity = tokenToRarityMap.get(tokenId);
+      console.log(`NFT #${tokenId}: ${rarity || 'NO MAPEADO'}`);
     });
 
     // 4. Generar el objeto de puntos
@@ -187,9 +205,20 @@ export async function POST(request: Request) {
     };
 
     // Procesar del 1 al 3000 (asumiendo que hay 3000 NFTs)
+    let unmappedCount = 0;
+    const finalRarityStats: Record<string, number> = {};
+    
     for (let tokenId = 1; tokenId <= 3000; tokenId++) {
       const rarity = tokenToRarityMap.get(tokenId) || 'original';
       let points = rarityPointsMap[rarity] || 1;
+      
+      // Contar NFTs no mapeados
+      if (!tokenToRarityMap.has(tokenId)) {
+        unmappedCount++;
+      }
+      
+      // Estadísticas finales
+      finalRarityStats[rarity] = (finalRarityStats[rarity] || 0) + 1;
       
       // Agregar bonus de Full Set si aplica
       if (tokenToFullSetMap.has(tokenId)) {
@@ -219,7 +248,10 @@ export async function POST(request: Request) {
       totalProcessed++;
     }
 
+    console.log(`📊 Estadísticas finales de procesamiento:`);
     console.log(`Procesados ${totalProcessed} NFTs, ${totalFullSets} con Full Set`);
+    console.log(`NFTs no mapeados (usando default 'original'): ${unmappedCount}`);
+    console.log('Distribución final de rarezas:', finalRarityStats);
 
     // 5. Generar el contenido del archivo
     const fileContent = `// Mapa de puntos de NFTs
