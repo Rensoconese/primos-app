@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       }
       
       // Determinar rareza del NFT
-      let rarity = nft.rarity?.toLowerCase() || '';
+      let rarity = nft.rarity?.toLowerCase()?.trim()?.replace(/\0/g, '') || '';
       
       // Si no hay rareza en el campo directo, intentar obtenerla de metadata
       if (!rarity && nft.metadata && typeof nft.metadata === 'object') {
