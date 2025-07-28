@@ -66,21 +66,20 @@ export async function POST(request: Request) {
     console.log('Configuración de rareza:', rarityPointsMap);
     console.log('Bonus Full Set:', fullSetBonus);
 
-    // 2. Obtener todos los NFTs únicos de la base de datos
+    // 2. Generar TODOS los token IDs de la colección (1 a 2378)
+    console.log('Generando puntos para TODOS los NFTs de la colección (1-2378)...');
+    
+    // Obtener metadatos conocidos de la base de datos como referencia
     const { data: nfts, error: nftsError } = await supabase
       .from('nfts')
       .select('token_id, rarity, metadata, is_full_set')
       .order('token_id', { ascending: true });
 
     if (nftsError) {
-      console.error('Error al obtener NFTs:', nftsError);
-      return NextResponse.json(
-        { error: 'Error al obtener NFTs' },
-        { status: 500 }
-      );
+      console.warn('Advertencia al obtener NFTs de la BD:', nftsError);
     }
 
-    console.log(`Encontrados ${nfts?.length || 0} NFTs en la base de datos`);
+    console.log(`Encontrados ${nfts?.length || 0} NFTs con metadatos en la base de datos`);
     
     // Debug: verificar si NFT #2228 está en la consulta
     const nft2228InQuery = nfts?.find(nft => Number(nft.token_id) === 2228);
@@ -93,14 +92,19 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3. Crear un Set para obtener token_ids únicos
-    const uniqueTokenIds = new Set<number>();
+    // 3. Crear mapas para TODOS los token IDs (1-2378)
+    const TOTAL_NFTS = 2378;
     const tokenToRarityMap = new Map<number, string>();
     const tokenToFullSetMap = new Map<number, boolean>();
 
+    // Primero, generar todos los token IDs y asignar rareza por defecto
+    for (let tokenId = 1; tokenId <= TOTAL_NFTS; tokenId++) {
+      tokenToRarityMap.set(tokenId, 'original'); // Default rarity
+    }
+
+    // Luego, sobrescribir con datos conocidos de la base de datos
     nfts?.forEach(nft => {
       const tokenId = Number(nft.token_id);
-      uniqueTokenIds.add(tokenId);
       
       // Guardar si es Full Set
       if (nft.is_full_set) {
@@ -171,7 +175,7 @@ export async function POST(request: Request) {
 
     // Debug: mostrar estadísticas del mapeo de rareza
     console.log(`✅ Mapeo de rareza completado:`);
-    console.log(`Total NFTs únicos procesados: ${uniqueTokenIds.size}`);
+    console.log(`Total NFTs procesados: ${TOTAL_NFTS}`);
     console.log(`Total NFTs con rareza mapeada: ${tokenToRarityMap.size}`);
     
     // Contar por tipo de rareza
@@ -204,11 +208,11 @@ export async function POST(request: Request) {
       finalPoints: 0
     };
 
-    // Procesar solo los NFTs que realmente existen en la base de datos
+    // Procesar TODOS los NFTs de la colección (1-2378)
     let unmappedCount = 0;
     const finalRarityStats: Record<string, number> = {};
     
-    for (const tokenId of uniqueTokenIds) {
+    for (let tokenId = 1; tokenId <= TOTAL_NFTS; tokenId++) {
       const rarity = tokenToRarityMap.get(tokenId) || 'original';
       let points = rarityPointsMap[rarity] || 1;
       
@@ -252,13 +256,14 @@ export async function POST(request: Request) {
     console.log(`Procesados ${totalProcessed} NFTs, ${totalFullSets} con Full Set`);
     console.log(`NFTs no mapeados (usando default 'original'): ${unmappedCount}`);
     console.log('Distribución final de rarezas:', finalRarityStats);
+    console.log(`🎯 IMPORTANTE: Generando archivo con ${TOTAL_NFTS} NFTs (colección completa)`);
 
     // 5. Generar el contenido del archivo
     const fileContent = `// Mapa de puntos de NFTs
 // Generado automáticamente el ${new Date().toISOString()}
 // NO MODIFICAR MANUALMENTE
 
-// Total de NFTs: ${totalProcessed}
+// Total de NFTs: ${TOTAL_NFTS}
 
 export const NFT_POINTS: Record<string, number> = ${JSON.stringify(nftPoints, null, 2)};
 
@@ -387,7 +392,7 @@ Admin: ${adminWallet}
       message: fileWritten 
         ? `Mapa de puntos generado y commitado a GitHub (${commitSha.substring(0, 7)})` 
         : 'Mapa de puntos calculado (sin commit - GITHUB_TOKEN no configurado)',
-      totalNFTs: totalProcessed,
+      totalNFTs: TOTAL_NFTS,
       totalFullSets: totalFullSets,
       rarityConfig: rarityPointsMap,
       fileContent: fileContent, // Siempre devolver el contenido para debug
