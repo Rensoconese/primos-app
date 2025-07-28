@@ -204,11 +204,11 @@ export async function POST(request: Request) {
       finalPoints: 0
     };
 
-    // Procesar del 1 al 3000 (asumiendo que hay 3000 NFTs)
+    // Procesar solo los NFTs que realmente existen en la base de datos
     let unmappedCount = 0;
     const finalRarityStats: Record<string, number> = {};
     
-    for (let tokenId = 1; tokenId <= 3000; tokenId++) {
+    for (const tokenId of uniqueTokenIds) {
       const rarity = tokenToRarityMap.get(tokenId) || 'original';
       let points = rarityPointsMap[rarity] || 1;
       
