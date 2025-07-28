@@ -16,7 +16,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Claims Pendientes */}
         <div 
           onClick={() => router.push('/admin/pending-claims')}
@@ -43,6 +43,36 @@ export default function AdminPage() {
           <h2 className="text-xl font-semibold text-white mb-2">Configuración de Rareza</h2>
           <p className="text-gray-400">Editar puntos por tipo de rareza y regenerar mapa</p>
           <p className="text-green-400 text-sm mt-2">⚡ Recomendado</p>
+        </div>
+
+        {/* Sincronizar Colección Completa */}
+        <div 
+          onClick={() => {
+            if (confirm('¿Sincronizar TODA la colección desde el contrato? Esto puede tomar varios minutos.')) {
+              // Implementar llamada a sync-full-collection
+              fetch('/api/admin/sync-full-collection', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${address}` }
+              }).then(res => res.json()).then(data => {
+                alert(data.success ? `✅ ${data.message}` : `❌ ${data.error}`);
+              });
+            }
+          }}
+          className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors border-2 border-red-600"
+        >
+          <h2 className="text-xl font-semibold text-white mb-2">Sincronizar Colección</h2>
+          <p className="text-gray-400">Obtener TODOS los NFTs desde el contrato</p>
+          <p className="text-red-400 text-sm mt-2">🔥 Completo</p>
+        </div>
+
+        {/* Visualizar Puntos NFTs */}
+        <div 
+          onClick={() => router.push('/admin/nft-points')}
+          className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors border-2 border-blue-600"
+        >
+          <h2 className="text-xl font-semibold text-white mb-2">Puntos de NFTs</h2>
+          <p className="text-gray-400">Visualizar todos los puntos generados por NFT</p>
+          <p className="text-blue-400 text-sm mt-2">📊 Análisis</p>
         </div>
       </div>
     </div>

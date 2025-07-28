@@ -92,13 +92,31 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3. Crear mapas para TODOS los token IDs (1-2378)
-    const TOTAL_NFTS = 2378;
+    // 3. Obtener el rango real de NFTs de la base de datos
+    const { data: tokenRange, error: rangeError } = await supabase
+      .from('nfts')
+      .select('token_id')
+      .order('token_id', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (rangeError) {
+      console.error('Error al obtener rango de NFTs:', rangeError);
+      return NextResponse.json(
+        { error: 'Error al obtener información de NFTs' },
+        { status: 500 }
+      );
+    }
+
+    const MAX_TOKEN_ID = Number(tokenRange.token_id);
+    console.log(`📊 COLECCIÓN REAL: NFTs van desde 1 hasta ${MAX_TOKEN_ID}`);
+
+    // Crear mapas para TODOS los token IDs (1 hasta el máximo encontrado)
     const tokenToRarityMap = new Map<number, string>();
     const tokenToFullSetMap = new Map<number, boolean>();
 
     // Primero, generar todos los token IDs y asignar rareza por defecto
-    for (let tokenId = 1; tokenId <= TOTAL_NFTS; tokenId++) {
+    for (let tokenId = 1; tokenId <= MAX_TOKEN_ID; tokenId++) {
       tokenToRarityMap.set(tokenId, 'original'); // Default rarity
     }
 
