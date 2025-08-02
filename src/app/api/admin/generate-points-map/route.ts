@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { Octokit } from '@octokit/rest';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Lista de wallets autorizadas
 const AUTHORIZED_ADMINS = [
@@ -65,224 +67,154 @@ export async function POST(request: Request) {
 
     console.log('Configuración de rareza:', rarityPointsMap);
     console.log('Bonus Full Set:', fullSetBonus);
-
-    // 2. Generar TODOS los token IDs de la colección (1 a 2378)
-    console.log('Generando puntos para TODOS los NFTs de la colección (1-2378)...');
     
-    // Obtener metadatos conocidos de la base de datos como referencia
-    const { data: nfts, error: nftsError } = await supabase
-      .from('nfts')
-      .select('token_id, rarity, metadata, is_full_set')
-      .order('token_id', { ascending: true });
+    // Debug: mostrar mapeo exacto
+    console.log('\n🔍 Mapeo de configuración de BD:');
+    Object.entries(rarityPointsMap).forEach(([key, value]) => {
+      console.log(`  "${key}" → ${value} puntos`);
+    });
 
-    if (nftsError) {
-      console.warn('Advertencia al obtener NFTs de la BD:', nftsError);
+    // 2. Leer el archivo de mapeo generado por sync-full-collection
+    console.log('Leyendo archivo de mapeo de NFTs...');
+    
+    let nftMappings;
+    try {
+      // Intentar leer el archivo de mapeo local primero
+      const mappingPath = path.join(process.cwd(), 'src', 'data', 'nftMappings.ts');
+      const fileContent = await fs.readFile(mappingPath, 'utf-8');
+      
+      // Extraer el array NFT_MAPPINGS del archivo TypeScript
+      // El regex debe capturar arrays muy grandes con saltos de línea
+      const mappingsMatch = fileContent.match(/export const NFT_MAPPINGS: NFTMapping\[\] = (\[[\s\S]*?\]);/);
+      if (!mappingsMatch) {
+        throw new Error('No se encontró NFT_MAPPINGS en el archivo');
+      }
+      
+      // Parsear el JSON
+      nftMappings = JSON.parse(mappingsMatch[1]);
+      console.log(`✅ Archivo de mapeo leído: ${nftMappings.length} NFTs`);
+      
+    } catch (fileError) {
+      console.error('Error leyendo archivo local:', fileError);
+      console.log('Intentando obtener desde GitHub...');
+      
+      // Si falla localmente, intentar desde GitHub
+      try {
+        const githubToken = process.env.GITHUB_TOKEN;
+        if (!githubToken) {
+          throw new Error('GITHUB_TOKEN no configurado');
+        }
+        
+        const octokit = new Octokit({ auth: githubToken });
+        const { data: fileData } = await octokit.rest.repos.getContent({
+          owner: 'Rensoconese',
+          repo: 'primos-app',
+          path: 'src/data/nftMappings.ts',
+          ref: 'main'
+        });
+        
+        if ('content' in fileData) {
+          const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+          // El regex debe capturar arrays muy grandes con saltos de línea
+          const mappingsMatch = content.match(/export const NFT_MAPPINGS: NFTMapping\[\] = (\[[\s\S]*?\]);/);
+          if (!mappingsMatch) {
+            throw new Error('No se encontró NFT_MAPPINGS en el archivo de GitHub');
+          }
+          nftMappings = JSON.parse(mappingsMatch[1]);
+          console.log(`✅ Archivo de mapeo obtenido desde GitHub: ${nftMappings.length} NFTs`);
+        }
+      } catch (githubError) {
+        console.error('Error obteniendo desde GitHub:', githubError);
+        return NextResponse.json(
+          { error: 'No se pudo leer el archivo de mapeo. Ejecute sync-full-collection primero.' },
+          { status: 500 }
+        );
+      }
     }
 
-    console.log(`Encontrados ${nfts?.length || 0} NFTs con metadatos en la base de datos`);
-    
-    // Debug: verificar si NFT #2228 está en la consulta
-    const nft2228InQuery = nfts?.find(nft => Number(nft.token_id) === 2228);
-    console.log(`NFT #2228 en consulta:`, nft2228InQuery ? 'SÍ' : 'NO');
-    if (nft2228InQuery) {
-      console.log(`NFT #2228 datos:`, {
-        token_id: nft2228InQuery.token_id,
-        rarity: nft2228InQuery.rarity,
-        is_full_set: nft2228InQuery.is_full_set
-      });
-    }
-
-    // 3. Obtener el rango real de NFTs de la base de datos
-    const { data: tokenRange, error: rangeError } = await supabase
-      .from('nfts')
-      .select('token_id')
-      .order('token_id', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (rangeError) {
-      console.error('Error al obtener rango de NFTs:', rangeError);
+    if (!nftMappings || !Array.isArray(nftMappings) || nftMappings.length === 0) {
       return NextResponse.json(
-        { error: 'Error al obtener información de NFTs' },
-        { status: 500 }
+        { error: 'Archivo de mapeo vacío o inválido. Ejecute sync-full-collection primero.' },
+        { status: 400 }
       );
     }
 
-    const MAX_TOKEN_ID = Number(tokenRange.token_id);
-    console.log(`📊 COLECCIÓN REAL: NFTs van desde 1 hasta ${MAX_TOKEN_ID}`);
+    const MAX_TOKEN_ID = Math.max(...nftMappings.map(nft => nft.token_id));
+    console.log(`📊 COLECCIÓN: ${nftMappings.length} NFTs mapeados (máximo ID: ${MAX_TOKEN_ID})`)
 
-    // Crear mapas para TODOS los token IDs (1 hasta el máximo encontrado)
-    const tokenToRarityMap = new Map<number, string>();
-    const tokenToFullSetMap = new Map<number, boolean>();
-
-    // Primero, generar todos los token IDs y asignar rareza por defecto
-    for (let tokenId = 1; tokenId <= MAX_TOKEN_ID; tokenId++) {
-      tokenToRarityMap.set(tokenId, 'original'); // Default rarity
-    }
-
-    // Luego, sobrescribir con datos conocidos de la base de datos
-    nfts?.forEach(nft => {
-      const tokenId = Number(nft.token_id);
-      
-      // Guardar si es Full Set
-      if (nft.is_full_set) {
-        tokenToFullSetMap.set(tokenId, true);
-        // Debug específico para NFT #2228
-        if (tokenId === 2228) {
-          console.log('🎯 NFT #2228: Full Set detectado en campo is_full_set');
-        }
-      }
-      
-      // Determinar rareza del NFT
-      let rarity = nft.rarity?.trim()?.replace(/\0/g, '') || '';
-      
-      // Si no hay rareza en el campo directo, intentar obtenerla de metadata
-      if (!rarity && nft.metadata && typeof nft.metadata === 'object') {
-        const metadata = nft.metadata as any;
-        const attributes = metadata.attributes || [];
-        const rarityAttr = attributes.find((attr: any) => 
-          attr.trait_type?.toLowerCase() === 'rarity'
-        );
-        if (rarityAttr) {
-          rarity = rarityAttr.value || '';
-        }
-        
-        // También verificar Full Set en metadata si no está en el campo directo
-        if (!tokenToFullSetMap.has(tokenId)) {
-          try {
-            const fullSetAttr = attributes.find((attr: any) => {
-              const traitType = attr.trait_type?.toLowerCase();
-              return (traitType === 'full set' || traitType === 'fullset') && attr.value === true;
-            });
-            if (fullSetAttr) {
-              tokenToFullSetMap.set(tokenId, true);
-              // Debug específico para NFT #2228
-              if (tokenId === 2228) {
-                console.log('🎯 NFT #2228: Full Set detectado en metadata');
-                console.log(`Atributo: ${JSON.stringify(fullSetAttr)}`);
-              }
-            }
-          } catch (metaError) {
-            console.error(`Error procesando metadata para NFT ${tokenId}:`, metaError);
-          }
-        }
-      }
-
-      // Mapear la rareza a nuestros tipos configurados
-      let mappedRarity = 'original'; // default
-      
-      // Mapear EXACTAMENTE como vienen de la BD
-      if (rarity === 'unique') {
-        mappedRarity = 'unique';
-      } else if (rarity === 'shiny Z summer') {
-        mappedRarity = 'shiny Z summer';
-      } else if (rarity === 'shiny Z') {
-        mappedRarity = 'shiny Z';
-      } else if (rarity === 'shiny') {
-        mappedRarity = 'shiny';
-      } else if (rarity === 'original Z summer') {
-        mappedRarity = 'original Z summer';
-      } else if (rarity === 'original Z') {
-        mappedRarity = 'original Z';
-      } else if (rarity === 'original') {
-        mappedRarity = 'original';
-      }
-
-      // Guardar la rareza mapeada (siempre sobrescribir con la rareza detectada)
-      tokenToRarityMap.set(tokenId, mappedRarity);
-    });
-
-    // Debug: mostrar estadísticas del mapeo de rareza
-    console.log(`✅ Mapeo de rareza completado:`);
-    console.log(`Total NFTs procesados: ${MAX_TOKEN_ID}`);
-    console.log(`Total NFTs con rareza mapeada: ${tokenToRarityMap.size}`);
-    
-    // Contar por tipo de rareza
-    const rarityStats: Record<string, number> = {};
-    for (const rarity of tokenToRarityMap.values()) {
-      rarityStats[rarity] = (rarityStats[rarity] || 0) + 1;
-    }
-    console.log('Estadísticas de rareza:', rarityStats);
-
-    // Debug: verificar algunos NFTs específicos
-    const sampleTokens = [1, 20, 35, 100, 500, 1000, 2228];
-    console.log('🔍 Muestra de NFTs mapeados:');
-    sampleTokens.forEach(tokenId => {
-      const rarity = tokenToRarityMap.get(tokenId);
-      console.log(`NFT #${tokenId}: ${rarity || 'NO MAPEADO'}`);
-    });
-
-    // 4. Generar el objeto de puntos
+    // 3. Generar el objeto de puntos basado en el mapeo
     const nftPoints: Record<string, number> = {};
     let totalProcessed = 0;
     let totalFullSets = 0;
-    
-    // Debug específico para NFT #2228
-    const nft2228Debug = {
-      foundInTokenToFullSetMap: tokenToFullSetMap.has(2228),
-      tokenToFullSetMapSize: tokenToFullSetMap.size,
-      rarity: tokenToRarityMap.get(2228) || 'not_found',
-      fullSetBonus: 0,
-      basePoints: 0,
-      finalPoints: 0
-    };
-
-    // Procesar TODOS los NFTs de la colección (1-2378)
-    let unmappedCount = 0;
     const finalRarityStats: Record<string, number> = {};
     
-    for (let tokenId = 1; tokenId <= MAX_TOKEN_ID; tokenId++) {
-      const rarity = tokenToRarityMap.get(tokenId) || 'original';
-      let points = rarityPointsMap[rarity] || 1;
+    // Procesar cada NFT del mapeo
+    nftMappings.forEach((nft: any) => {
+      const tokenId = nft.token_id;
+      const rarity = nft.rarity;
+      const isFullSet = nft.is_full_set;
       
-      // Contar NFTs no mapeados
-      if (!tokenToRarityMap.has(tokenId)) {
-        unmappedCount++;
+      // Mapear nombres de rareza del archivo a los nombres de la BD
+      // El archivo tiene "original Z summer" pero la BD tiene "original_z_summer"
+      const rarityMappings: Record<string, string> = {
+        'original': 'original',
+        'original Z': 'original_z',
+        'original Z summer': 'original_z_summer',
+        'shiny': 'shiny',
+        'shiny Z': 'shiny_z',
+        'shiny Z summer': 'shiny_z_summer',
+        'unique': 'unique'
+      };
+      
+      // Obtener el nombre de rareza para la BD
+      const dbRarity = rarityMappings[rarity] || rarity.toLowerCase().replace(/ /g, '_');
+      
+      // Obtener puntos base según la rareza
+      let points = rarityPointsMap[dbRarity];
+      
+      if (points === undefined) {
+        console.warn(`⚠️ Rareza no configurada: "${rarity}" (mapeada como "${dbRarity}") para NFT ${tokenId}`);
+        points = rarityPointsMap['original'] || 1; // Default a original
       }
       
-      // Estadísticas finales
+      // Debug específico para NFT 360
+      if (tokenId === 360) {
+        console.log(`\n🎯 Debug NFT #360:`);
+        console.log(`  Rareza original: "${rarity}"`);
+        console.log(`  Rareza mapeada: "${dbRarity}"`);
+        console.log(`  Puntos base: ${points}`);
+        console.log(`  Full Set: ${isFullSet}`);
+      }
+      
+      // Estadísticas de rareza
       finalRarityStats[rarity] = (finalRarityStats[rarity] || 0) + 1;
       
       // Agregar bonus de Full Set si aplica
-      if (tokenToFullSetMap.has(tokenId)) {
+      if (isFullSet) {
         points += fullSetBonus;
         totalFullSets++;
-        
-        // Debug específico para NFT #2228
-        if (tokenId === 2228) {
-          console.log('🎯 NFT #2228: FULL SET BONUS APLICADO');
-          console.log(`Base points: ${rarityPointsMap[rarity] || 1}`);
-          console.log(`Full Set bonus: ${fullSetBonus}`);
-          console.log(`Total points: ${points}`);
-          
-          nft2228Debug.fullSetBonus = fullSetBonus;
-          nft2228Debug.basePoints = rarityPointsMap[rarity] || 1;
-          nft2228Debug.finalPoints = points;
-        }
-      } else if (tokenId === 2228) {
-        console.log('❌ NFT #2228: Full Set NO detectado en el mapa');
-        console.log(`TokenToFullSetMap contiene: ${Array.from(tokenToFullSetMap.keys()).includes(2228)}`);
-        
-        nft2228Debug.basePoints = rarityPointsMap[rarity] || 1;
-        nft2228Debug.finalPoints = points;
+        console.log(`🎖️ NFT ${tokenId}: Full Set bonus aplicado (+${fullSetBonus})`);
       }
       
+      // Asignar puntos finales
       nftPoints[tokenId.toString()] = points;
       totalProcessed++;
-    }
+    });
 
     console.log(`📊 Estadísticas finales de procesamiento:`);
     console.log(`Procesados ${totalProcessed} NFTs, ${totalFullSets} con Full Set`);
-    console.log(`NFTs no mapeados (usando default 'original'): ${unmappedCount}`);
-    console.log('Distribución final de rarezas:', finalRarityStats);
-    console.log(`🎯 IMPORTANTE: Generando archivo con ${MAX_TOKEN_ID} NFTs (colección completa)`);
+    console.log('Distribución de rarezas:', finalRarityStats);
+    console.log(`🎯 Generando archivo con ${totalProcessed} NFTs`);
+    
+    // Verificar NFT 360 en el resultado final
+    console.log(`\n✅ NFT #360 en archivo final: ${nftPoints['360']} puntos`);
 
-    // 5. Generar el contenido del archivo
+    // 4. Generar el contenido del archivo
     const fileContent = `// Mapa de puntos de NFTs
 // Generado automáticamente el ${new Date().toISOString()}
 // NO MODIFICAR MANUALMENTE
-
-// Total de NFTs: ${MAX_TOKEN_ID}
+// Basado en: src/data/nftMappings.ts
+// Total de NFTs: ${totalProcessed}
 
 export const NFT_POINTS: Record<string, number> = ${JSON.stringify(nftPoints, null, 2)};
 
@@ -322,6 +254,15 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 }
 `;
 
+    // 5. Escribir archivo localmente primero
+    try {
+      const localPath = path.join(process.cwd(), 'src', 'data', 'nftPoints.ts');
+      await fs.writeFile(localPath, fileContent, 'utf-8');
+      console.log('✅ Archivo escrito localmente');
+    } catch (localError) {
+      console.error('Error escribiendo archivo local:', localError);
+    }
+    
     // 6. Escribir a GitHub usando la API
     let fileWritten = false;
     let commitSha = '';
@@ -364,6 +305,11 @@ export function getNFTPointsSafe(tokenId: string, defaultValue: number = 0): num
 Total NFTs: ${totalProcessed}
 Total Full Sets: ${totalFullSets}
 Admin: ${adminWallet}
+Basado en: src/data/nftMappings.ts
+
+Configuración de puntos aplicada:
+${JSON.stringify(rarityPointsMap, null, 2)}
+Full Set Bonus: +${fullSetBonus}
 
 🤖 Generated with [Claude Code](https://claude.ai/code)`;
 
@@ -411,12 +357,11 @@ Admin: ${adminWallet}
       message: fileWritten 
         ? `Mapa de puntos generado y commitado a GitHub (${commitSha.substring(0, 7)})` 
         : 'Mapa de puntos calculado (sin commit - GITHUB_TOKEN no configurado)',
-      totalNFTs: MAX_TOKEN_ID,
+      totalNFTs: totalProcessed,
       totalFullSets: totalFullSets,
       rarityConfig: rarityPointsMap,
-      fileContent: fileContent, // Siempre devolver el contenido para debug
-      nft2228Points: nftPoints['2228'], // Debug específico para NFT #2228
-      nft2228Debug: nft2228Debug, // Debug completo de NFT #2228
+      rarityStats: finalRarityStats,
+      basedOnFile: 'src/data/nftMappings.ts',
       githubCommit: fileWritten ? commitSha : null
     });
 

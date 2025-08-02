@@ -239,6 +239,47 @@ npm run lint
 
 ## 🐛 Common Issues & Solutions
 
+### NFT Points System Architecture (Updated 2025-08-02)
+
+**Sistema de dos pasos para generar puntos NFT:**
+
+#### Paso 1: Mapeo de NFTs (`sync-full-collection`)
+- **Función**: Lee el contrato NFT directamente y extrae metadatos
+- **Genera**: `src/data/nftMappings.ts` con estructura:
+  ```typescript
+  {
+    token_id: number,
+    rarity: string,      // "original", "original Z", "shiny Z summer", etc.
+    is_full_set: boolean,
+    metadata?: any
+  }
+  ```
+- **NO asigna puntos**, solo mapea la información de cada NFT
+- **Se ejecuta cuando**: Las rarezas cambian en el contrato (evoluciones)
+
+#### Paso 2: Asignación de Puntos (`generate-points-map`)
+- **Función**: Lee el archivo de mapeo y aplica configuración de puntos
+- **Lee**: `src/data/nftMappings.ts` (generado en paso 1)
+- **Aplica**: Configuración de puntos desde tabla `nft_points_mapping`:
+  ```
+  | Rareza            | Puntos Base | Full Set Bonus |
+  |-------------------|-------------|----------------|
+  | original          | 1           | +2             |
+  | original Z        | 4           | +2             |
+  | original Z summer | 10          | +2             |
+  | shiny             | 7           | +2             |
+  | shiny Z           | 13          | +2             |
+  | shiny Z summer    | 22          | +2             |
+  | unique            | 30          | +2             |
+  ```
+- **Genera**: `src/data/nftPoints.ts` con puntos finales
+- **Se ejecuta cuando**: Cambia la configuración de puntos en el admin
+
+**IMPORTANTE**: 
+- NO hay base de datos involucrada en el mapeo
+- Los archivos se guardan en GitHub, no en Supabase
+- El flujo es: Contrato → Mapeo → Puntos → Archivo final
+
 ### NFT Points System Issues (Fixed 2025-07-25)
 **Problem**: All NFTs showing 1 point instead of correct rarity-based values
 **Root Cause**: Corrupted `bonus_points` column in database conflicting with generated points map

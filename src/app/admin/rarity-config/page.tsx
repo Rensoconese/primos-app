@@ -321,13 +321,26 @@ export default function RarityConfigPage() {
         </div>
 
         <div className="mt-8 bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-3">Información Importante</h3>
-          <ul className="space-y-2 text-gray-400">
-            <li>• Los cambios en los puntos no afectan hasta regenerar el mapa</li>
-            <li>• El archivo de puntos contiene los ~3000 NFTs con sus puntos asignados</li>
-            <li>• Regenerar el mapa puede tomar varios segundos</li>
-            <li>• Los cambios afectarán los próximos check-ins de los usuarios</li>
-          </ul>
+          <h3 className="text-lg font-semibold mb-3">📋 Flujo del Sistema de Puntos</h3>
+          <div className="space-y-4 text-gray-400">
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h4 className="font-semibold text-white">Paso 1: Sincronizar Colección</h4>
+              <p className="text-sm mt-1">Ejecutar desde el panel principal. Lee el contrato NFT y genera <code className="bg-gray-700 px-1 rounded">nftMappings.ts</code> con las rarezas actuales.</p>
+              <p className="text-sm text-yellow-400 mt-1">⚠️ Necesario cuando cambian rarezas (evoluciones)</p>
+            </div>
+            
+            <div className="border-l-4 border-green-500 pl-4">
+              <h4 className="font-semibold text-white">Paso 2: Regenerar Mapa de Puntos</h4>
+              <p className="text-sm mt-1">Aplica la configuración de puntos al mapeo y genera <code className="bg-gray-700 px-1 rounded">nftPoints.ts</code> final.</p>
+              <p className="text-sm text-green-400 mt-1">✅ Usar después de cambiar puntos o sincronizar</p>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-600/50 rounded">
+            <p className="text-sm text-yellow-400">
+              <strong>Nota:</strong> NO usa base de datos. Los archivos se guardan en GitHub directamente.
+            </p>
+          </div>
         </div>
       </div>
     </div>

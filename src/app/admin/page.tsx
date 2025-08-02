@@ -41,8 +41,8 @@ export default function AdminPage() {
           className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors border-2 border-green-600"
         >
           <h2 className="text-xl font-semibold text-white mb-2">Configuración de Rareza</h2>
-          <p className="text-gray-400">Editar puntos por tipo de rareza y regenerar mapa</p>
-          <p className="text-green-400 text-sm mt-2">⚡ Recomendado</p>
+          <p className="text-gray-400">Paso 2: Configurar puntos y generar archivo final</p>
+          <p className="text-green-400 text-sm mt-2">⚡ Genera nftPoints.ts</p>
         </div>
 
         {/* Sincronizar Colección Completa */}
@@ -54,15 +54,19 @@ export default function AdminPage() {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${address}` }
               }).then(res => res.json()).then(data => {
-                alert(data.success ? `✅ ${data.message}` : `❌ ${data.error}`);
+                if (data.success) {
+                  alert(`✅ ${data.message}\n\n📄 Archivo generado: ${data.mappingFile}\n\n⚠️ Ahora ve a "Configuración de Rareza" para generar el archivo de puntos.`);
+                } else {
+                  alert(`❌ ${data.error}`);
+                }
               });
             }
           }}
           className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors border-2 border-red-600"
         >
           <h2 className="text-xl font-semibold text-white mb-2">Sincronizar Colección</h2>
-          <p className="text-gray-400">Obtener TODOS los NFTs desde el contrato</p>
-          <p className="text-red-400 text-sm mt-2">🔥 Completo</p>
+          <p className="text-gray-400">Paso 1: Mapear NFTs desde el contrato</p>
+          <p className="text-red-400 text-sm mt-2">🔥 Genera nftMappings.ts</p>
         </div>
 
         {/* Visualizar Puntos NFTs */}
