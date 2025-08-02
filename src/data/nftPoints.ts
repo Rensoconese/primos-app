@@ -1,5 +1,5 @@
 // Mapa de puntos de NFTs
-// Generado automáticamente el 2025-08-02T15:07:00.049Z
+// Generado automáticamente el 2025-08-02T18:27:11.955Z
 // NO MODIFICAR MANUALMENTE
 
 // Total de NFTs: 3000
@@ -127,7 +127,7 @@ export const NFT_POINTS: Record<string, number> = {
   "120": 7,
   "121": 7,
   "122": 1,
-  "123": 15,
+  "123": 9,
   "124": 1,
   "125": 1,
   "126": 1,
