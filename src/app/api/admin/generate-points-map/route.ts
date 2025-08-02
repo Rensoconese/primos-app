@@ -193,7 +193,7 @@ export async function POST(request: Request) {
 
     // Debug: mostrar estadísticas del mapeo de rareza
     console.log(`✅ Mapeo de rareza completado:`);
-    console.log(`Total NFTs procesados: ${TOTAL_NFTS}`);
+    console.log(`Total NFTs procesados: ${MAX_TOKEN_ID}`);
     console.log(`Total NFTs con rareza mapeada: ${tokenToRarityMap.size}`);
     
     // Contar por tipo de rareza
@@ -230,7 +230,7 @@ export async function POST(request: Request) {
     let unmappedCount = 0;
     const finalRarityStats: Record<string, number> = {};
     
-    for (let tokenId = 1; tokenId <= TOTAL_NFTS; tokenId++) {
+    for (let tokenId = 1; tokenId <= MAX_TOKEN_ID; tokenId++) {
       const rarity = tokenToRarityMap.get(tokenId) || 'original';
       let points = rarityPointsMap[rarity] || 1;
       
@@ -274,14 +274,14 @@ export async function POST(request: Request) {
     console.log(`Procesados ${totalProcessed} NFTs, ${totalFullSets} con Full Set`);
     console.log(`NFTs no mapeados (usando default 'original'): ${unmappedCount}`);
     console.log('Distribución final de rarezas:', finalRarityStats);
-    console.log(`🎯 IMPORTANTE: Generando archivo con ${TOTAL_NFTS} NFTs (colección completa)`);
+    console.log(`🎯 IMPORTANTE: Generando archivo con ${MAX_TOKEN_ID} NFTs (colección completa)`);
 
     // 5. Generar el contenido del archivo
     const fileContent = `// Mapa de puntos de NFTs
 // Generado automáticamente el ${new Date().toISOString()}
 // NO MODIFICAR MANUALMENTE
 
-// Total de NFTs: ${TOTAL_NFTS}
+// Total de NFTs: ${MAX_TOKEN_ID}
 
 export const NFT_POINTS: Record<string, number> = ${JSON.stringify(nftPoints, null, 2)};
 
@@ -410,7 +410,7 @@ Admin: ${adminWallet}
       message: fileWritten 
         ? `Mapa de puntos generado y commitado a GitHub (${commitSha.substring(0, 7)})` 
         : 'Mapa de puntos calculado (sin commit - GITHUB_TOKEN no configurado)',
-      totalNFTs: TOTAL_NFTS,
+      totalNFTs: MAX_TOKEN_ID,
       totalFullSets: totalFullSets,
       rarityConfig: rarityPointsMap,
       fileContent: fileContent, // Siempre devolver el contenido para debug
