@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       }
       
       // Determinar rareza del NFT
-      let rarity = nft.rarity?.toLowerCase()?.trim()?.replace(/\0/g, '') || '';
+      let rarity = nft.rarity?.trim()?.replace(/\0/g, '') || '';
       
       // Si no hay rareza en el campo directo, intentar obtenerla de metadata
       if (!rarity && nft.metadata && typeof nft.metadata === 'object') {
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
           attr.trait_type?.toLowerCase() === 'rarity'
         );
         if (rarityAttr) {
-          rarity = rarityAttr.value?.toLowerCase() || '';
+          rarity = rarityAttr.value || '';
         }
         
         // También verificar Full Set en metadata si no está en el campo directo
@@ -171,19 +171,20 @@ export async function POST(request: Request) {
       // Mapear la rareza a nuestros tipos configurados
       let mappedRarity = 'original'; // default
       
-      if (rarity.includes('unique')) {
+      // Mapear EXACTAMENTE como vienen de la BD
+      if (rarity === 'unique') {
         mappedRarity = 'unique';
-      } else if (rarity.includes('shiny') && rarity.includes('z') && rarity.includes('summer')) {
-        mappedRarity = 'shiny_z_summer';
-      } else if (rarity.includes('shiny') && rarity.includes('z')) {
-        mappedRarity = 'shiny_z';
-      } else if (rarity.includes('shiny')) {
+      } else if (rarity === 'shiny Z summer') {
+        mappedRarity = 'shiny Z summer';
+      } else if (rarity === 'shiny Z') {
+        mappedRarity = 'shiny Z';
+      } else if (rarity === 'shiny') {
         mappedRarity = 'shiny';
-      } else if (rarity.includes('original') && rarity.includes('z') && rarity.includes('summer')) {
-        mappedRarity = 'original_z_summer';
-      } else if (rarity.includes('original') && rarity.includes('z')) {
-        mappedRarity = 'original_z';
-      } else if (rarity.includes('original')) {
+      } else if (rarity === 'original Z summer') {
+        mappedRarity = 'original Z summer';
+      } else if (rarity === 'original Z') {
+        mappedRarity = 'original Z';
+      } else if (rarity === 'original') {
         mappedRarity = 'original';
       }
 
