@@ -245,6 +245,7 @@ npm run lint
 
 #### Paso 1: Mapeo de NFTs (`sync-full-collection`)
 - **Función**: Lee el contrato NFT directamente y extrae metadatos
+- **Ubicación en Admin**: Panel Principal → "Sincronizar Colección"
 - **Genera**: `src/data/nftMappings.ts` con estructura:
   ```typescript
   {
@@ -256,9 +257,11 @@ npm run lint
   ```
 - **NO asigna puntos**, solo mapea la información de cada NFT
 - **Se ejecuta cuando**: Las rarezas cambian en el contrato (evoluciones)
+- **Tiempo estimado**: 4-5 minutos para 3000 NFTs
 
 #### Paso 2: Asignación de Puntos (`generate-points-map`)
 - **Función**: Lee el archivo de mapeo y aplica configuración de puntos
+- **Ubicación en Admin**: "Configuración de Rareza" → "Regenerar Mapa de Puntos"
 - **Lee**: `src/data/nftMappings.ts` (generado en paso 1)
 - **Aplica**: Configuración de puntos desde tabla `nft_points_mapping`:
   ```
@@ -274,11 +277,42 @@ npm run lint
   ```
 - **Genera**: `src/data/nftPoints.ts` con puntos finales
 - **Se ejecuta cuando**: Cambia la configuración de puntos en el admin
+- **Tiempo estimado**: 3-5 segundos
+
+#### Flujo de Trabajo en Producción
+
+1. **Cuando cambian rarezas por evoluciones**:
+   ```
+   Panel Admin → "Sincronizar Colección" → Esperar ~5 min → 
+   "Configuración de Rareza" → "Regenerar Mapa de Puntos"
+   ```
+
+2. **Cuando solo cambian los puntos**:
+   ```
+   "Configuración de Rareza" → Modificar puntos → "Guardar Cambios" → 
+   "Regenerar Mapa de Puntos"
+   ```
+
+#### Detalles Técnicos
+
+**Mapeo de nombres de rareza**:
+- Archivo mapeo: `"original Z summer"` (con espacios y mayúsculas)
+- Base de datos: `"original_z_summer"` (con guiones bajos)
+- El sistema convierte automáticamente entre ambos formatos
+
+**Archivos generados**:
+- `src/data/nftMappings.ts`: ~4.5MB (contiene metadatos completos)
+- `src/data/nftPoints.ts`: ~40KB (solo IDs y puntos)
+
+**Requisitos**:
+- `GITHUB_TOKEN` configurado para escribir en el repositorio
+- Permisos de admin (wallets autorizadas)
 
 **IMPORTANTE**: 
 - NO hay base de datos involucrada en el mapeo
 - Los archivos se guardan en GitHub, no en Supabase
 - El flujo es: Contrato → Mapeo → Puntos → Archivo final
+- Los cambios se aplican inmediatamente después de generar `nftPoints.ts`
 
 ### NFT Points System Issues (Fixed 2025-07-25)
 **Problem**: All NFTs showing 1 point instead of correct rarity-based values
