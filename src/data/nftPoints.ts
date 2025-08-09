@@ -1,5 +1,5 @@
 // Mapa de puntos de NFTs
-// Generado automáticamente el 2025-08-06T13:25:25.870Z
+// Generado automáticamente el 2025-08-09T20:48:43.485Z
 // NO MODIFICAR MANUALMENTE
 // Basado en: src/data/nftMappings.ts
 // Total de NFTs: 3000
@@ -13,7 +13,7 @@ export const NFT_POINTS: Record<string, number> = {
   "6": 1,
   "7": 3,
   "8": 1,
-  "9": 1,
+  "9": 10,
   "10": 1,
   "11": 10,
   "12": 1,
@@ -46,7 +46,7 @@ export const NFT_POINTS: Record<string, number> = {
   "39": 10,
   "40": 1,
   "41": 1,
-  "42": 1,
+  "42": 4,
   "43": 7,
   "44": 1,
   "45": 1,
@@ -166,7 +166,7 @@ export const NFT_POINTS: Record<string, number> = {
   "159": 1,
   "160": 1,
   "161": 1,
-  "162": 7,
+  "162": 13,
   "163": 1,
   "164": 1,
   "165": 6,
@@ -577,7 +577,7 @@ export const NFT_POINTS: Record<string, number> = {
   "570": 1,
   "571": 1,
   "572": 1,
-  "573": 3,
+  "573": 10,
   "574": 1,
   "575": 1,
   "576": 1,
@@ -1639,7 +1639,7 @@ export const NFT_POINTS: Record<string, number> = {
   "1632": 1,
   "1633": 1,
   "1634": 1,
-  "1635": 1,
+  "1635": 10,
   "1636": 1,
   "1637": 1,
   "1638": 1,
@@ -1990,7 +1990,7 @@ export const NFT_POINTS: Record<string, number> = {
   "1983": 1,
   "1984": 1,
   "1985": 1,
-  "1986": 1,
+  "1986": 10,
   "1987": 1,
   "1988": 1,
   "1989": 1,
