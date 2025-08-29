@@ -99,6 +99,22 @@ export async function GET(req: NextRequest) {
           hours_remaining: data.hours_remaining
         });
       }
+    } else if (data) {
+      // Handle users who have never checked in (last_check_in is null)
+      data.checked_in_today_utc = false;
+      data.can_checkin = true;
+      data.hours_remaining = 0;
+      data.hours_since_last_checkin = null;
+      data.days_since_last_checkin = null;
+      data.streak_broken = false;
+      
+      console.log('User has never checked in - allowing first check-in', {
+        wallet: walletAddress,
+        lastCheckIn: data.last_check_in,
+        checked_in_today_utc: data.checked_in_today_utc,
+        can_checkin: data.can_checkin,
+        hours_remaining: data.hours_remaining
+      });
     }
       
     if (error) {
