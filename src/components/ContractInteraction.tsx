@@ -23,7 +23,6 @@ import {
 } from 'viem';
 import { ronin } from '@/utils/chain';
 import { getSecondsUntilNextUTCMidnight, formatDateForDebug, getUTCDebugInfo } from '@/services/dateService';
-import { updateLeaderboardStreak } from '@/services/leaderboardService';
 import { useUserData, useInvalidateUserData } from '@/hooks/useUserData';
 
 interface ContractInteractionProps {
@@ -586,11 +585,6 @@ const ContractInteraction: React.FC<ContractInteractionProps> = ({
             
             // Marcar que ya se hizo check-in hoy
             setHasCheckedIn(true);
-            
-            // Actualizar el leaderboard si tenemos la dirección del usuario
-            if (userAddress) {
-              await updateLeaderboardStreak(userAddress, result.user?.current_streak || checkInCount);
-            }
             
             // Invalidar los datos de usuario para forzar un refresh
             await invalidateUserData(userAddress);

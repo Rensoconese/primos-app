@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { calculateNFTPoints } from '@/services/nftService';
-import { updateLeaderboard } from '@/services/leaderboardService';
 import { normalizeToUTCMidnight, isSameUTCDay, getDayDifferenceUTC, getUTCDebugInfo } from '@/services/dateService';
 
 export async function POST(req: NextRequest) {
@@ -167,15 +166,6 @@ if (listedNFTsCount > 0) {
     
     if (pointsError) throw pointsError;
     
-    // Obtener tokens reclamados para asegurarnos de preservar ese valor
-    const { data: leaderboardData } = await supabase
-      .from('leaderboard')
-      .select('tokens_claimed')
-      .eq('wallet_address', wallet_address.toLowerCase())
-      .single();
-      
-    console.log('Datos del leaderboard actuales:', leaderboardData);
-    
     // Obtener el número total de NFTs del usuario desde la base de datos
     const { data: allUserNfts } = await supabase
       .from('nfts')
@@ -183,17 +173,6 @@ if (listedNFTsCount > 0) {
       .eq('wallet_address', wallet_address.toLowerCase());
     
     const totalNFTCount = allUserNfts?.length || 0;
-    
-    // Actualizar el leaderboard con la información correcta de streak y NFT count
-    await updateLeaderboard(wallet_address, {
-      best_streak: user.max_streak,
-      current_streak: user.current_streak,
-      points_earned: pointsEarned + (user.total_points || 0),
-      last_active: new Date().toISOString(),
-      nft_count: totalNFTCount,
-      // Conservar tokens_claimed si existe, no lo actualizamos aquí
-      tokens_claimed: leaderboardData?.tokens_claimed || 0
-    });
     
     return NextResponse.json({
       success: true,

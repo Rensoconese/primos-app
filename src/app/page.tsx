@@ -8,7 +8,6 @@ import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet
 import NFTDisplay from '@/components/NFTDisplay/NFTDisplay';
 import RewardsPanel from '@/components/RewardsPanel/RewardsPanel';
 import HowRewardsWorks from '@/components/NFTDisplay/HowRewardsWorks';
-import Navigation from '@/components/Navigation/Navigation';
 import MobileMenu from '@/components/MobileMenu/MobileMenu';
 import { RONIN_CHAIN_IDS, isRoninNetwork, detectChainMismatch } from '@/utils/contract';
 import { supabase } from '@/utils/supabase';
@@ -199,9 +198,6 @@ export default function Home() {
                   </p>
                 </div>
               </div>
-
-              {/* Desktop Navigation */}
-              <Navigation />
 
               {/* Right side - Wallet and Mobile Menu */}
               <div className="flex items-center space-x-2">

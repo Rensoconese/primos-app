@@ -11,8 +11,7 @@ export default function Navigation() {
   };
 
   const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/leaderboard', label: 'Leaderboard' }
+    { href: '/', label: 'Home' }
   ];
 
   return (

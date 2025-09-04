@@ -443,14 +443,6 @@ export async function POST(request: Request) {
         // Obtener el total de tokens reclamados por el usuario
         const totalTokensClaimed = await getUserTotalClaimedTokens(walletAddress, supabase);
         
-        // Actualizar el leaderboard con los tokens reclamados
-        const { updateLeaderboard } = await import('@/services/leaderboardService');
-        await updateLeaderboard(walletAddress, {
-          tokens_claimed: totalTokensClaimed,
-          points_earned: newTotalPoints,
-          last_active: new Date().toISOString()
-        });
-        
         console.log('Proceso de reclamación completado con éxito');
         
         // Liberar el lock de claim

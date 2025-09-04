@@ -179,13 +179,6 @@ export async function POST(request: Request) {
         created_at: new Date().toISOString()
       });
 
-    // Actualizar leaderboard
-    const { updateLeaderboard } = await import('@/services/leaderboardService');
-    await updateLeaderboard(walletAddress, {
-      points_earned: newPoints,
-      last_active: new Date().toISOString()
-    });
-
     return NextResponse.json({
       success: true,
       message: 'Puntos actualizados exitosamente',

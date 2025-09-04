@@ -1,5 +1,4 @@
 import { supabase } from '@/utils/supabase';
-import { updateLeaderboard } from '@/services/leaderboardService';
 import { 
   createPublicClient, 
   createWalletClient, 
@@ -295,10 +294,8 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       const totalBonusPoints = blockchainNFTIds.reduce((sum, tokenId) => {
         return sum + getNFTPointsSafe(String(tokenId), 0);
       }, 0);
-      
-      await updateLeaderboardNFTData(walletAddress, blockchainNFTIds.length, totalBonusPoints);
     } catch (error) {
-      console.error('Error updating leaderboard NFT data:', error);
+      console.error('Error calculating NFT bonus points:', error);
     }
     
     // STEP 8: CHECK MARKETPLACE LISTINGS
@@ -555,17 +552,3 @@ export async function blockSpecificNFTs(walletAddress: string, nftIds: string[])
 }
 
 
-export async function updateLeaderboardNFTData(walletAddress: string, nftCount: number, totalBonusPoints: number) {
-  try {
-    // Usar la función centralizada para actualizar el leaderboard
-    const result = await updateLeaderboard(walletAddress, {
-      nft_count: nftCount,
-      last_active: new Date().toISOString()
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('Error updating leaderboard NFT data:', error);
-    return { success: false, error };
-  }
-}

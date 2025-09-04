@@ -253,14 +253,6 @@ export async function POST(request: Request) {
           .update({ total_points: newPoints })
           .eq('id', claim.user_id);
 
-        // Actualizar leaderboard
-        const { updateLeaderboard } = await import('@/services/leaderboardService');
-        await updateLeaderboard(claim.wallet_address, {
-          tokens_claimed: Number(claim.amount),
-          points_earned: newPoints,
-          last_active: new Date().toISOString()
-        });
-
         return NextResponse.json({
           success: true,
           txHash,
