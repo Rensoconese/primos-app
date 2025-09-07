@@ -1,5 +1,5 @@
 // Mapa de puntos de NFTs
-// Generado automáticamente el 2025-09-02T14:33:25.730Z
+// Generado automáticamente el 2025-09-05T17:28:06.264Z
 // NO MODIFICAR MANUALMENTE
 // Basado en: src/data/nftMappings.ts
 // Total de NFTs: 3000
@@ -402,7 +402,7 @@ export const NFT_POINTS: Record<string, number> = {
   "395": 1,
   "396": 1,
   "397": 13,
-  "398": 1,
+  "398": 10,
   "399": 1,
   "400": 1,
   "401": 1,
