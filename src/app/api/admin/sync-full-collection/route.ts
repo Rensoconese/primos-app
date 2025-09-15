@@ -256,6 +256,11 @@ Los puntos se asignan en un proceso separado.
 // Función para procesar metadatos de un NFT individual
 async function processNFTMetadata(client: any, tokenId: number): Promise<NFTMapping> {
   try {
+    // Log especial para NFTs problemáticos
+    if (tokenId === 398 || tokenId === 376) {
+      console.log(`\n🔍 Procesando NFT especial #${tokenId}...`);
+    }
+    
     // Obtener tokenURI del contrato
     const tokenURI = await client.readContract({
       address: NFT_CONTRACT_ADDRESS as `0x${string}`,
@@ -263,14 +268,39 @@ async function processNFTMetadata(client: any, tokenId: number): Promise<NFTMapp
       functionName: 'tokenURI',
       args: [BigInt(tokenId)],
     });
+    
+    if (tokenId === 398 || tokenId === 376) {
+      console.log(`  TokenURI obtenido: ${tokenURI}`);
+    }
 
-    // Obtener metadatos del URI
-    const response = await fetch(tokenURI);
+    // Obtener metadatos del URI con timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+    
+    const response = await fetch(tokenURI, {
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeout));
+    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     
-    const metadata = await response.json();
+    // Manejar diferentes content-types
+    const contentType = response.headers.get('content-type');
+    let metadata;
+    
+    if (contentType?.includes('application/json')) {
+      metadata = await response.json();
+    } else {
+      // Si no es JSON directo, obtener como texto y parsear
+      const text = await response.text();
+      try {
+        metadata = JSON.parse(text);
+      } catch (parseError) {
+        console.error(`Error parseando JSON para NFT ${tokenId}:`, parseError);
+        throw new Error(`Invalid JSON for NFT ${tokenId}`);
+      }
+    }
     
     // Extraer rareza y traits
     const attributes = metadata.attributes || [];
@@ -282,6 +312,12 @@ async function processNFTMetadata(client: any, tokenId: number): Promise<NFTMapp
     
     // Obtener el valor exacto de rareza (sin modificar ni convertir a lowercase)
     let rarity = rarityAttr?.value || 'original';
+    
+    // Log especial para NFTs problemáticos
+    if (tokenId === 398 || tokenId === 376) {
+      console.log(`  Rareza detectada: "${rarity}"`);
+      console.log(`  Atributos completos:`, JSON.stringify(attributes, null, 2));
+    }
     
     // Normalizar nombres de rareza para mantener consistencia
     // Mapear exactamente como vienen del contrato
@@ -315,8 +351,36 @@ async function processNFTMetadata(client: any, tokenId: number): Promise<NFTMapp
       metadata: metadata
     };
     
-  } catch (error) {
-    console.error(`Error procesando NFT ${tokenId}:`, error);
+  } catch (error: any) {
+    console.error(`❌ Error procesando NFT ${tokenId}:`, error.message || error);
+    
+    // Intentar recuperación manual para NFTs importantes
+    if (tokenId === 398 || tokenId === 376) {
+      console.log(`🔄 Intentando recuperación manual para NFT ${tokenId}...`);
+      try {
+        // Hacer fetch directamente con manejo especial
+        const backupUrl = `https://gepdgbaadctkbuxeaops.supabase.co/storage/v1/object/public/metadata/${tokenId}`;
+        const backupResponse = await fetch(backupUrl);
+        const backupText = await backupResponse.text();
+        const backupMetadata = JSON.parse(backupText);
+        
+        const rarityAttr = backupMetadata.attributes?.find((attr: any) => 
+          attr.trait_type?.toLowerCase() === 'rarity'
+        );
+        
+        if (rarityAttr?.value) {
+          console.log(`✅ Recuperación exitosa para NFT ${tokenId}: ${rarityAttr.value}`);
+          return {
+            token_id: tokenId,
+            rarity: rarityAttr.value,
+            is_full_set: false
+          };
+        }
+      } catch (recoveryError) {
+        console.error(`❌ Fallo la recuperación para NFT ${tokenId}:`, recoveryError);
+      }
+    }
+    
     // Valor por defecto en caso de error
     return {
       token_id: tokenId,

@@ -53,6 +53,7 @@ export const getRedisToken = () => {
 // Lazy initialization of Redis client
 let redis: Redis | null = null;
 let redisAvailable = true; // Track if Redis is available
+let redisInitialized = false; // Track if we already logged initialization
 
 // Function to get or create Redis client
 export const getRedisClient = (): Redis | null => {
@@ -64,49 +65,29 @@ export const getRedisClient = (): Redis | null => {
   const url = getRedisUrl();
   const token = getRedisToken();
   
-  console.log('Attempting to create Redis client...');
-  console.log('URL available:', !!url);
-  console.log('Token available:', !!token);
-  
   if (!url || !token) {
-    console.warn('Redis not configured: Missing URL or token');
-    console.warn('URL:', url || 'NOT SET');
-    console.warn('Token length:', token ? token.length : 0);
     redisAvailable = false;
     return null;
   }
   
   try {
-    console.log('[Redis Debug] Creating Redis client:', {
-      url: url,
-      tokenLength: token.length,
-      tokenPrefix: token.substring(0, 10) + '...'
-    });
-    
     redis = new Redis({
       url: url,
       token: token,
     });
     
-    console.log('[Redis Debug] Redis client initialized successfully');
+    // Only log once when first initialized
+    if (!redisInitialized) {
+      console.log('Redis client initialized');
+      redisInitialized = true;
+    }
     return redis;
   } catch (error) {
-    console.error('[Redis Debug] Failed to initialize Redis client:', error);
-    if (error instanceof Error) {
-      console.error('[Redis Debug] Error details:', {
-        message: error.message,
-        name: error.name,
-        cause: (error as any).cause
-      });
-    }
+    console.error('Failed to initialize Redis client:', error);
     redisAvailable = false;
     return null;
   }
 };
-
-// Log para depuración
-console.log('Redis URL:', getRedisUrl() ? 'Configurado' : 'No configurado');
-console.log('Redis Token:', getRedisToken() ? 'Configurado' : 'No configurado');
 
 // Prefijo para las claves de NFTs bloqueados
 const NFT_KEY_PREFIX = 'nft:locked:';
@@ -147,7 +128,7 @@ export async function lockNFT(contractAddress: string, tokenId: string, walletAd
     // Mark Redis as unavailable if we get a network error
     if (error instanceof Error && error.message.includes('fetch failed')) {
       redisAvailable = false;
-      console.error('Redis marked as unavailable due to network error');
+      // Silently mark as unavailable
     }
     return false;
   }
@@ -172,7 +153,7 @@ export async function getNFTLockInfo(contractAddress: string, tokenId: string): 
     // Mark Redis as unavailable if we get a network error
     if (error instanceof Error && error.message.includes('fetch failed')) {
       redisAvailable = false;
-      console.error('Redis marked as unavailable due to network error');
+      // Silently mark as unavailable
     }
     return null;
   }
@@ -221,7 +202,7 @@ export async function unlockNFT(contractAddress: string, tokenId: string): Promi
     // Mark Redis as unavailable if we get a network error
     if (error instanceof Error && error.message.includes('fetch failed')) {
       redisAvailable = false;
-      console.error('Redis marked as unavailable due to network error');
+      // Silently mark as unavailable
     }
     return false;
   }
@@ -264,7 +245,7 @@ export async function getLockedNFTsByWallet(walletAddress: string): Promise<Arra
     // Mark Redis as unavailable if we get a network error
     if (error instanceof Error && error.message.includes('fetch failed')) {
       redisAvailable = false;
-      console.error('Redis marked as unavailable due to network error');
+      // Silently mark as unavailable
     }
     return [];
   }
@@ -303,7 +284,7 @@ export async function getNFTLockStats(): Promise<{
     // Mark Redis as unavailable if we get a network error
     if (error instanceof Error && error.message.includes('fetch failed')) {
       redisAvailable = false;
-      console.error('Redis marked as unavailable due to network error');
+      // Silently mark as unavailable
     }
     return { totalLocked: 0, byWallet: {} };
   }
@@ -369,6 +350,186 @@ export function resetRedisAvailability(): void {
   console.log('Redis availability reset - will retry on next operation');
 }
 
+// ============= V2 FUNCTIONS WITH SEPARATE NAMESPACE =============
+
+/**
+ * Genera la clave Redis para un NFT en V2
+ */
+function getNFTKeyV2(contractAddress: string, tokenId: string): string {
+  return `v2:nft:locked:${contractAddress.toLowerCase()}:${tokenId}`;
+}
+
+/**
+ * V2: Bloquea un NFT hasta el próximo reset de día UTC
+ * @returns true si se bloqueó correctamente, false si ya estaba bloqueado
+ */
+export async function lockNFTV2(contractAddress: string, tokenId: string, walletAddress: string): Promise<boolean> {
+  const client = getRedisClient();
+  if (!client) {
+    console.warn('Redis not available, cannot lock NFT (v2)');
+    return false;
+  }
+  
+  try {
+    const key = getNFTKeyV2(contractAddress, tokenId);
+    const ttl = getSecondsUntilNextUTCMidnight();
+    
+    // Almacenar la wallet que bloqueó el NFT
+    const result = await client.set(key, walletAddress.toLowerCase(), { 
+      nx: true, // Solo establecer si no existe
+      ex: ttl    // Expirar automáticamente en el próximo reset UTC
+    });
+    
+    console.log(`V2: Locked NFT ${tokenId} for wallet ${walletAddress}`);
+    return result === 'OK';
+  } catch (error) {
+    console.error('Error locking NFT (v2):', error);
+    if (error instanceof Error && error.message.includes('fetch failed')) {
+      redisAvailable = false;
+      // Silently mark as unavailable
+    }
+    return false;
+  }
+}
+
+/**
+ * V2: Verifica si un NFT está bloqueado
+ * @returns true si está bloqueado, false si no
+ */
+export async function isNFTLockedV2(contractAddress: string, tokenId: string): Promise<boolean> {
+  const client = getRedisClient();
+  if (!client) {
+    console.warn('Redis not available, cannot check NFT lock (v2)');
+    return false;
+  }
+  
+  try {
+    const key = getNFTKeyV2(contractAddress, tokenId);
+    const lockInfo = await client.get(key);
+    const isLocked = lockInfo !== null;
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`V2: Checking lock for NFT ${contractAddress}:${tokenId} - Locked: ${isLocked}`);
+    }
+    return isLocked;
+  } catch (error) {
+    console.error(`V2: Error checking NFT lock ${contractAddress}:${tokenId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * V2: Obtiene información sobre el bloqueo de un NFT
+ * @returns La dirección de wallet que bloqueó el NFT, o null si no está bloqueado
+ */
+export async function getNFTLockInfoV2(contractAddress: string, tokenId: string): Promise<string | null> {
+  const client = getRedisClient();
+  if (!client) {
+    console.warn('Redis not available, cannot get NFT lock info (v2)');
+    return null;
+  }
+  
+  try {
+    const key = getNFTKeyV2(contractAddress, tokenId);
+    return await client.get(key);
+  } catch (error) {
+    console.error('Error getting NFT lock info (v2):', error);
+    return null;
+  }
+}
+
+/**
+ * V2 BATCH: Check multiple NFTs lock status in a single operation
+ * @returns Map of tokenId -> isLocked boolean
+ */
+export async function batchCheckNFTLocksV2(
+  contractAddress: string, 
+  tokenIds: string[]
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  
+  // Initialize all as unlocked
+  tokenIds.forEach(tokenId => result.set(tokenId, false));
+  
+  const client = getRedisClient();
+  if (!client) {
+    return result; // Return all as unlocked if Redis not available
+  }
+  
+  try {
+    // Build all keys
+    const keys = tokenIds.map(tokenId => getNFTKeyV2(contractAddress, tokenId));
+    
+    // Use Redis pipeline for batch operation
+    const pipeline = client.pipeline();
+    keys.forEach(key => pipeline.exists(key));
+    
+    const results = await pipeline.exec();
+    
+    // Process results
+    if (results) {
+      results.forEach((res, index) => {
+        const isLocked = res[1] === 1; // exists returns 1 if key exists
+        result.set(tokenIds[index], isLocked);
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error in batch check NFT locks:', error);
+    return result; // Return all as unlocked on error
+  }
+}
+
+/**
+ * V2 BATCH: Lock multiple NFTs in a single operation
+ * @returns Map of tokenId -> success boolean
+ */
+export async function batchLockNFTsV2(
+  contractAddress: string,
+  tokenIds: string[],
+  walletAddress: string
+): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  
+  // Initialize all as failed
+  tokenIds.forEach(tokenId => result.set(tokenId, false));
+  
+  const client = getRedisClient();
+  if (!client) {
+    return result;
+  }
+  
+  try {
+    const ttl = getSecondsUntilNextUTCMidnight();
+    const pipeline = client.pipeline();
+    
+    // Add all SET operations to pipeline
+    tokenIds.forEach(tokenId => {
+      const key = getNFTKeyV2(contractAddress, tokenId);
+      pipeline.set(key, walletAddress.toLowerCase(), {
+        nx: true, // Only set if not exists
+        ex: ttl   // Expire at midnight UTC
+      });
+    });
+    
+    const results = await pipeline.exec();
+    
+    // Process results
+    if (results) {
+      results.forEach((res, index) => {
+        const success = res[1] === 'OK';
+        result.set(tokenIds[index], success);
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error in batch lock NFTs:', error);
+    return result;
+  }
+}
+
 export default {
   lockNFT,
   isNFTLocked,
@@ -381,5 +542,12 @@ export default {
   getRedisUrl,
   getRedisToken,
   isRedisAvailable,
-  resetRedisAvailability
+  resetRedisAvailability,
+  // V2 functions
+  lockNFTV2,
+  isNFTLockedV2,
+  getNFTLockInfoV2,
+  // V2 Batch functions
+  batchCheckNFTLocksV2,
+  batchLockNFTsV2
 };

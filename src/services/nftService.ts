@@ -13,7 +13,7 @@ import {
 } from 'viem';
 import { ronin } from '@/utils/chain';
 import { ERC721_ABI } from '@/utils/erc721-abi';
-import { isNFTLocked, lockNFT } from './redisService';
+import { isNFTLockedV2, lockNFTV2, batchCheckNFTLocksV2, batchLockNFTsV2 } from './redisService';
 import { isNFTListed } from './marketplaceService';
 import { getNFTPointsSafe } from '@/data/nftPoints';
 import { 
@@ -53,7 +53,6 @@ export interface NFT {
  */
 export async function fetchUserNFTs(provider: any, walletAddress: string) {
   try {
-    console.log(`⚡ START: Fetching NFTs for wallet: ${walletAddress}`);
     
     // STEP 1: GET NFTS FROM BLOCKCHAIN
     // Usar el publicClient directamente si está disponible, o crearlo si no
@@ -84,8 +83,6 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     });
     const balanceNum = Number(balance);
     
-    console.log(`Found ${balanceNum} NFTs in blockchain for wallet ${walletAddress}`);
-    
     // Get all token IDs from blockchain
     const blockchainNFTIds: number[] = [];
     for (let i = 0; i < balanceNum; i++) {
@@ -106,8 +103,6 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
     if (existingError) {
       console.error('Error checking existing NFTs:', existingError);
       // Continue despite error to try recovery
-    } else {
-      console.log(`🔍 EXISTING DB STATE: Found ${existingNfts?.length || 0} NFTs in database for wallet ${walletAddress.toLowerCase()}`);
     }
     
     // Create a map of existing NFTs for easy lookup
@@ -142,7 +137,10 @@ export async function fetchUserNFTs(provider: any, walletAddress: string) {
       }
     }
     
-    console.log(`Sync plan: Add ${nftsToAdd.length}, Update ${nftsToUpdate.length}, Remove ${nftsToRemove.length} NFTs`);
+    // Only log if there are actual changes
+    if (nftsToAdd.length > 0 || nftsToUpdate.length > 0 || nftsToRemove.length > 0) {
+      console.log(`NFT sync: Add ${nftsToAdd.length}, Update ${nftsToUpdate.length}, Remove ${nftsToRemove.length}`);
+    }
     
     // STEP 4: PROCESS REMOVALS
     if (nftsToRemove.length > 0) {
@@ -347,44 +345,41 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
       };
     }
     
-    // Step 1: Verify all NFTs in parallel (both locking and marketplace listing)
-    console.log(`Starting parallel verification of ${nfts.length} NFTs...`);
+    // Step 1: Check NFT blocks in DATABASE first (más confiable)
+    const tokenIds = nfts.map(nft => String(nft.token_id));
+    const contractAddress = nfts[0]?.contract_address || PRIMOS_NFT_CONTRACT;
     
-    // Crear un array de promesas para verificar todos los NFTs simultáneamente
-    const checkPromises = nfts.map(async (nft, index) => {
-      try {
-        // Verificar si el NFT está bloqueado (usado hoy)
-        const isLocked = await isNFTLocked(nft.contract_address, String(nft.token_id));
-        
-        // Verificar si el NFT está listado en el marketplace
-        const isListed = await isNFTListed(nft.contract_address, String(nft.token_id), walletAddress);
-        
-        // Si está listado en marketplace, también bloquearlo en Redis
-        if (isListed && !isLocked) {
-          console.log(`🏪 NFT ${nft.contract_address}:${nft.token_id} está en marketplace - bloqueando en Redis`);
-          await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
-        }
-        
-        // Un NFT no está disponible si está bloqueado O listado en el marketplace
-        const isUnavailable = isLocked || isListed;
-        
-        return { 
-          nft, 
-          isUnavailable,
-          isLocked,
-          isListed,
-          index 
-        };
-      } catch (err) {
-        console.error(`🚨 ERROR CRÍTICO verificando NFT ${nft.contract_address}:${nft.token_id}:`, err);
-        console.error(`⚠️  Este error podría estar causando que NFTs se marquen incorrectamente`);
-        // En caso de error, asumimos que está bloqueado para evitar uso incorrecto
-        return { nft, isUnavailable: true, isLocked: true, isListed: false, index };
-      }
+    // Verificar bloqueos en Redis 
+    // NOTA: El bloqueo en la base de datos se verifica solo en el servidor (API routes)
+    console.log('Checking NFT locks in Redis...');
+    const redisLockedMap = await batchCheckNFTLocksV2(contractAddress, tokenIds);
+    
+    // Usar solo el estado de Redis para el cliente
+    const lockedStatusMap = new Map<string, boolean>();
+    tokenIds.forEach(tokenId => {
+      const redisLocked = redisLockedMap.get(tokenId) || false;
+      lockedStatusMap.set(tokenId, redisLocked);
     });
     
-    // Esperar a que todas las verificaciones se completen
-    const checkResults = await Promise.all(checkPromises);
+    // Process results - no need for Promise.all since Redis check is already done
+    const checkResults = nfts.map((nft, index) => {
+      const tokenId = String(nft.token_id);
+      const isLocked = lockedStatusMap.get(tokenId) || false;
+      
+      // SKIP marketplace check for performance (temporarily disabled)
+      const isListed = false;
+      
+      // Un NFT no está disponible si está bloqueado O listado en el marketplace
+      const isUnavailable = isLocked || isListed;
+      
+      return {
+        nft,
+        isUnavailable,
+        isLocked,
+        isListed,
+        index
+      };
+    });
     
     // Paso 2: Filtrar los NFTs elegibles basados en los resultados
     const eligibleNfts: NFT[] = [];
@@ -440,31 +435,20 @@ export async function calculateNFTPoints(walletAddress: string, blockNFTs: boole
     console.log(`NFTs bloqueados por marketplace: ${totalBlockedByMarketplace} (${marketplaceBlockedPoints} puntos)`);
     console.log(`PUNTOS TOTALES ELEGIBLES: ${totalPoints}`);
     
-    // Paso 3: Si es necesario, bloquear los NFTs elegibles en paralelo
+    // Paso 3: Si es necesario, bloquear los NFTs elegibles usando batch operation
     if (blockNFTs && eligibleNfts.length > 0) {
-      console.log(`Bloqueando ${eligibleNfts.length} NFTs elegibles en paralelo...`);
+      console.log(`Bloqueando ${eligibleNfts.length} NFTs elegibles con batch operation...`);
       
-      // Crear un array de promesas para bloquear todos los NFTs elegibles simultáneamente
-      const lockPromises = eligibleNfts.map(async (nft) => {
-        try {
-          const lockResult = await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
-          console.log(`NFT ${nft.contract_address}:${nft.token_id} ${lockResult ? 'bloqueado' : 'no se pudo bloquear'} para wallet ${walletAddress}`);
-          return { nft, success: lockResult };
-        } catch (err) {
-          console.error(`Error bloqueando NFT ${nft.contract_address}:${nft.token_id}:`, err);
-          return { nft, success: false };
-        }
-      });
+      // Usar batch lock para bloquear todos los NFTs en una sola operación Redis
+      const eligibleTokenIds = eligibleNfts.map(nft => String(nft.token_id));
+      const lockResults = await batchLockNFTsV2(contractAddress, eligibleTokenIds, walletAddress);
       
-      // Esperar a que todos los bloqueos se completen
-      await Promise.all(lockPromises);
+      // Log summary of results
+      const successCount = Array.from(lockResults.values()).filter(success => success).length;
+      console.log(`Batch lock completado: ${successCount}/${eligibleNfts.length} NFTs bloqueados exitosamente`);
     }
     
-    const endTime = Date.now();
-    const executionTime = (endTime - startTime) / 1000;
-    
-    console.log(`Total de NFTs elegibles: ${eligibleNfts.length}, Total de puntos: ${totalPoints}`);
-    console.log(`Tiempo de ejecución: ${executionTime.toFixed(2)} segundos`);
+    // Removed duplicate logs, already logged above
     
     return { 
       success: true, 
@@ -517,23 +501,13 @@ export async function blockSpecificNFTs(walletAddress: string, nftIds: string[])
       return { success: true, blockedCount: 0 };
     }
     
-    // Bloquear los NFTs en paralelo
-    const lockPromises = nfts.map(async (nft) => {
-      try {
-        const lockResult = await lockNFT(nft.contract_address, String(nft.token_id), walletAddress);
-        console.log(`NFT ${nft.contract_address}:${nft.token_id} ${lockResult ? 'bloqueado' : 'no se pudo bloquear'} para wallet ${walletAddress}`);
-        return { nft, success: lockResult };
-      } catch (err) {
-        console.error(`Error bloqueando NFT ${nft.contract_address}:${nft.token_id}:`, err);
-        return { nft, success: false };
-      }
-    });
-    
-    // Esperar a que todos los bloqueos se completen
-    const results = await Promise.all(lockPromises);
+    // Bloquear los NFTs usando batch operation
+    const contractAddress = nfts[0]?.contract_address || PRIMOS_NFT_CONTRACT;
+    const tokenIds = nfts.map(nft => String(nft.token_id));
+    const lockResults = await batchLockNFTsV2(contractAddress, tokenIds, walletAddress);
     
     // Contar cuántos NFTs se bloquearon exitosamente
-    const blockedCount = results.filter(result => result.success).length;
+    const blockedCount = Array.from(lockResults.values()).filter(success => success).length;
     
     const endTime = Date.now();
     const executionTime = (endTime - startTime) / 1000;

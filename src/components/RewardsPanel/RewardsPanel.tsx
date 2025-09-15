@@ -21,47 +21,50 @@ const FIRE_DUST_ID = 4; // ID correcto según metadatos del token Fire Dust
 
 interface RewardsPanelProps {
   userAddress: string | null;
-  totalPoints: number;
+  totalPoints: number; // Mantenemos para compatibilidad pero usaremos pending claims
   onRewardClaimed: () => void;
   provider: any; // Cambiado de ethers.providers.Web3Provider a any para compatibilidad
+  refreshTrigger: number; // Prop para triggear refresh cuando cambia (no optional)
+}
+
+interface PendingClaim {
+  id: string;
+  wallet_address: string;
+  daily_id: string;
+  points_to_claim: number;
+  status: string;
+  created_at: string;
+  expire_at: string;
 }
 
 const RewardsPanel: React.FC<RewardsPanelProps> = ({ 
   userAddress, 
   totalPoints,
   onRewardClaimed,
-  provider
+  provider,
+  refreshTrigger
 }) => {
   // Estado local
-  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorInfo, setErrorInfo] = useState<{
-    title: string;
-    suggestions: string[];
-  } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tokenBalance, setTokenBalance] = useState<string>('0');
+  const [pendingClaims, setPendingClaims] = useState<PendingClaim[]>([]);
+  const [pendingPoints, setPendingPoints] = useState<number>(0);
+  const [loadingClaims, setLoadingClaims] = useState<boolean>(true);
+  const [processingClaims, setProcessingClaims] = useState<Set<string>>(new Set());
   
-  // Cargar balance de token Fire Dust
+  // Cargar balance de token Fire Dust y pending claims
   useEffect(() => {
     if (!userAddress || !provider) return;
     
-    const fetchTokenBalance = async () => {
+    const fetchData = async () => {
       try {
-        // Usar el publicClient directamente si está disponible, o crearlo si no
+        // Fetch token balance
         const publicClient = provider.publicClient || createPublicClient({
           chain: ronin,
           transport: custom(provider.provider || provider)
         });
         
-        // Crear instancia del contrato ERC1155 usando viem
-        const fireDustContract = getContract({
-          address: FIRE_DUST_ADDRESS as Address,
-          abi: FIRE_DUST_ABI,
-          client: publicClient
-        });
-        
-        // Obtener balance del token con ID específico
         const balance = await publicClient.readContract({
           address: FIRE_DUST_ADDRESS as Address,
           abi: FIRE_DUST_ABI,
@@ -70,205 +73,93 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
         });
         
         setTokenBalance(balance.toString());
-      } catch (err: any) {
-        console.error('Error fetching token balance:', err);
-      }
-    };
-    
-    fetchTokenBalance();
-  }, [userAddress, provider]);
-  
-  // La actualización del leaderboard ahora se realiza en el endpoint /api/claim-tokens
-  
-  // Función para realizar peticiones con reintento y manejo de errores de red
-  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3): Promise<Response> => {
-    let lastError: Error | null = null;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        console.log(`Attempt ${attempt + 1} to call API ${url}`);
-        const response = await fetch(url, options);
-        return response;
-      } catch (err: any) {
-        console.error(`Attempt ${attempt + 1} failed:`, err.message);
-        lastError = err;
         
-        // Si no es el último intento, esperar antes de reintentar (backoff exponencial)
-        if (attempt < maxRetries - 1) {
-          const delay = Math.pow(2, attempt) * 1000;
-          console.log(`Waiting ${delay}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+        // Fetch pending claims from v2
+        setLoadingClaims(true);
+        const claimsResponse = await fetch(`/api/v2/claim?wallet_address=${userAddress}&status=pending`);
+        const claimsData = await claimsResponse.json();
+        
+        if (claimsResponse.ok) {
+          setPendingClaims(claimsData.claims || []);
+          setPendingPoints(claimsData.summary?.totalPoints || 0);
         }
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoadingClaims(false);
       }
-    }
-    
-    // Si llegamos aquí, todos los intentos fallaron
-    throw lastError || new Error('All fetch attempts failed');
-  };
-  
-  // Manejar la solicitud de recompensa
-  const handleClaimRewards = async () => {
-    if (!userAddress || totalPoints <= 0) {
-      setError('No points available to claim');
-      return;
-    }
-    
-    // Verificar que la wallet esté correctamente conectada
-    if (!provider) {
-      setError('Wallet provider not available. Please reconnect your wallet.');
-      return;
-    }
-    
-    // Verificar que podamos acceder a la wallet usando viem
-    try {
-      // Usar el publicClient y walletClient directamente si están disponibles, o crearlos si no
-      const publicClient = provider.publicClient || createPublicClient({
-        chain: ronin,
-        transport: custom(provider.provider || provider)
-      });
-      
-      // Usar el walletClient directamente si está disponible, o crearlo si no
-      const walletClient = provider.walletClient || createWalletClient({
-        chain: ronin,
-        transport: custom(provider.provider || provider)
-      });
-      
-      // Obtener cuentas
-      const accounts = await walletClient.getAddresses();
-      if (accounts.length === 0) {
-        setError('No accounts found in wallet. Please reconnect your wallet.');
-        return;
-      }
-      
-      // Verificar que estamos en la red correcta
-      const chainId = publicClient.chain.id;
-      if (![2020, 2021].includes(chainId)) {
-        setError(`You are connected to an unsupported network (Chain ID: ${chainId}). Please switch to Ronin Mainnet or Testnet.`);
-        return;
-      }
-    } catch (err) {
-      console.error('Error checking wallet connection:', err);
-      setError('Error verifying wallet connection. Please reconnect your wallet.');
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    setErrorInfo(null);
-    setSuccess(null);
-    
-    // Función para clasificar y formatear errores
-    const handleApiError = (error: any) => {
-      console.error('Detailed error information:', error);
-      
-      // Extraer información del error
-      const errorMessage = error.message || 'Unknown error';
-      const isNetworkError = errorMessage.includes('Network error') || 
-                            errorMessage.includes('NETWORK_ERROR');
-      
-      if (isNetworkError) {
-        setErrorInfo({
-          title: 'Network Connection Error',
-          suggestions: [
-            'Verify your internet connection',
-            'Check if Ronin network is operational',
-            'Make sure your Ronin wallet is unlocked and connected',
-            'Try refreshing the page'
-          ]
-        });
-        return `Network Error: Could not connect to the Ronin network`;
-      }
-      
-      if (errorMessage.includes('Transaction processing delayed') || 
-          errorMessage.includes('Procesamiento de transacción retrasado')) {
-        setErrorInfo({
-          title: 'Transaction Delayed',
-          suggestions: [
-            'Your request has been registered',
-            'Tokens will be sent to your wallet soon',
-            'You can check back later'
-          ]
-        });
-        return errorMessage;
-      }
-      
-      if (errorMessage.includes('Approval error')) {
-        setErrorInfo({
-          title: 'Token Approval Error',
-          suggestions: [
-            'The reward pool may need approval to transfer tokens',
-            'Try again later when this has been resolved'
-          ]
-        });
-        return errorMessage;
-      }
-      
-      // Mensaje genérico para otros errores
-      setErrorInfo({
-        title: 'Error Processing Request',
-        suggestions: [
-          'Try again later',
-          'Ensure your wallet is properly connected',
-          'Contact support if the issue persists'
-        ]
-      });
-      
-      return errorMessage;
     };
-
+    
+    fetchData();
+  }, [userAddress, provider, refreshTrigger]); // Added refreshTrigger dependency
+  
+  // Manejar claim individual
+  const handleClaimIndividual = async (claimId: string) => {
+    if (!userAddress) {
+      setError('Please connect your wallet');
+      return;
+    }
+    
+    // Marcar como procesando (UI optimista)
+    setProcessingClaims(prev => new Set(prev).add(claimId));
+    setError(null);
+    
     try {
-      // Intentar primero con el nuevo endpoint simplificado
-      console.log('Calling simplified claim tokens API...');
-      const response = await fetch('/api/claim-tokens', {
+      console.log(`Claiming individual reward: ${claimId}`);
+      
+      // Llamar al endpoint v2 con el claim específico
+      const response = await fetch('/api/v2/claim', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          walletAddress: userAddress,
-          amount: totalPoints,
+          wallet_address: userAddress,
+          claim_ids: [claimId], // Claim individual
+          claim_all: false
         }),
       });
       
       const data = await response.json();
-      console.log('API Response:', data);
       
       if (!response.ok) {
-        const errorMessage = data.error || 'Failed to claim rewards';
-        const errorDetails = data.details || '';
-        const errorCode = data.code || '';
-        
-        // Mensaje de error más detallado
-        let fullErrorMessage = `${errorMessage}${errorDetails ? ': ' + errorDetails : ''}`;
-        if (errorCode) {
-          fullErrorMessage += ` (Code: ${errorCode})`;
-        }
-        
-        // Registrar el error completo en la consola
-        console.error('API Error Response:', data);
-        
-        throw new Error(fullErrorMessage);
+        throw new Error(data.error || 'Failed to claim reward');
       }
       
-      // La actualización del leaderboard ya se realiza en el endpoint claim-tokens,
-      // elimino la actualización duplicada desde aquí para evitar contar doble los tokens
+      const pointsClaimed = data.claimResult?.pointsClaimed || 0;
+      const txHash = data.claimResult?.txHash;
       
-      // Actualizar el balance local de tokens
-      const newTokenBalance = (parseInt(tokenBalance) + totalPoints).toString();
+      // Actualizar el balance local
+      const newTokenBalance = (parseInt(tokenBalance) + pointsClaimed).toString();
       setTokenBalance(newTokenBalance);
       
-      // Mostrar mensaje de éxito
-      setSuccess(`Successfully claimed ${totalPoints} Fire Dust tokens!`);
+      // Remover el claim de la lista
+      setPendingClaims(prev => prev.filter(c => c.id !== claimId));
+      setPendingPoints(prev => prev - pointsClaimed);
       
-      // Actualizar la UI del componente padre sin recargar NFTDisplay
-      console.log("Llamando a onRewardClaimed (actualización específica para recompensas)");
+      // Mostrar notificación de éxito
+      const successMsg = `✅ Successfully claimed ${pointsClaimed} Fire Dust!${txHash ? ` TX: ${txHash.slice(0, 10)}...` : ''}`;
+      setSuccess(successMsg);
+      
+      // Limpiar mensaje después de 5 segundos
+      setTimeout(() => setSuccess(null), 5000);
+      
+      // Notificar al componente padre
       onRewardClaimed();
+      
     } catch (err: any) {
-      console.error('Error claiming rewards:', err);
-      const formattedError = handleApiError(err);
-      setError(formattedError || 'An error occurred while claiming rewards');
+      console.error('Error claiming individual reward:', err);
+      setError(err.message || 'Failed to claim reward');
+      
+      // Mostrar error por 5 segundos y luego limpiar
+      setTimeout(() => setError(null), 5000);
     } finally {
-      setLoading(false);
+      // Quitar del set de procesando
+      setProcessingClaims(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(claimId);
+        return newSet;
+      });
     }
   };
   
@@ -276,39 +167,22 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
     <div className="bg-gray-800 rounded-lg shadow-md p-6 text-white">
       <h2 className="text-2xl font-bold mb-4 uppercase">Fire dust rewards</h2>
       
-      
       {error && (
-        <div className="bg-red-100 text-red-700 p-4 rounded-md mb-4">
-          {errorInfo && (
-            <>
-              <h3 className="font-bold">{errorInfo.title}</h3>
-              <p className="mb-2">{error}</p>
-              {errorInfo.suggestions.length > 0 && (
-                <div className="mt-2">
-                  <p className="font-medium text-sm">Suggestions:</p>
-                  <ul className="list-disc pl-5 mt-1">
-                    {errorInfo.suggestions.map((suggestion, index) => (
-                      <li key={index} className="text-sm">{suggestion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          )}
-          {!errorInfo && error}
+        <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4">
+          {error}
         </div>
       )}
       
       {success && (
-        <div className="bg-green-100 text-green-700 p-4 rounded-md mb-4">
+        <div className="bg-green-100 text-green-700 p-3 rounded-md mb-4 animate-pulse">
           {success}
         </div>
       )}
       
-      <div className="">
-        <div className="bg-gray-700 p-4 rounded-md">
-        {totalPoints <= 0 ? (
-          <div className="mt-4">
+      <div className="bg-gray-700 p-4 rounded-md">
+        {/* Fire Dust header con video/imagen */}
+        {pendingPoints <= 0 ? (
+          <div className="mb-4">
             <img 
               src="/images/firedust-byn.png" 
               alt="No rewards available" 
@@ -316,10 +190,9 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
             />
           </div>
         ) : (
-          <div className="mt-4">
+          <div className="mb-4">
             <video 
               src="/videos/fire-dust.webm" 
-              
               autoPlay
               loop
               muted
@@ -327,31 +200,60 @@ const RewardsPanel: React.FC<RewardsPanelProps> = ({
             />
           </div>
         )}
-          <p className="text-2xl font-bold"> Total: {totalPoints === 0 ? '0' : totalPoints.toFixed(2)}</p>
-          
-        </div>
         
-        
-      </div>
-      
-      <div className=" pt-4">
-      <div className="mb-4">
-          <p className="text-sm text-gray-400">
-            You will claim all your available Fire Dust.
-          </p>
-        </div>
-        <button
-          onClick={handleClaimRewards}
-          disabled={loading || totalPoints <= 0 || !userAddress}
-          className={`w-full px-6 py-3 rounded-md font-medium ${
-            loading || totalPoints <= 0 || !userAddress
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-          title="Claim your rewards at any time!"
-        >
-          {loading ? 'Processing...' : 'Claim'}
-        </button>
+        {/* Lista de claims individuales */}
+        {loadingClaims ? (
+          <div className="text-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="text-sm text-gray-400 mt-2">Loading claims...</p>
+          </div>
+        ) : pendingClaims.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-400">No pending claims</p>
+            <p className="text-sm text-gray-500 mt-1">Send your Primos to mine and earn Fire Dust</p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {pendingClaims.map((claim, index) => (
+              <div
+                key={claim.id}
+                className="bg-gray-600/50 p-3 rounded-lg border border-gray-500/20 flex items-center gap-3"
+              >
+                {/* Imagen de Fire Dust */}
+                <div className="relative w-12 h-12 flex-shrink-0">
+                  <img 
+                    src="/images/fire-dust.png"
+                    alt="Fire Dust"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                
+                {/* Nombre y cantidad */}
+                <div className="flex-1">
+                  <div className="font-semibold text-white">
+                    Fire Dust
+                  </div>
+                  <div className="text-xl font-bold text-white">
+                    {claim.points_to_claim}
+                  </div>
+                </div>
+                
+                {/* Botón de Claim */}
+                <button
+                  onClick={() => handleClaimIndividual(claim.id)}
+                  disabled={processingClaims.has(claim.id)}
+                  className={`px-4 py-2 font-semibold rounded-md transition-colors text-sm ${
+                    processingClaims.has(claim.id)
+                      ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {processingClaims.has(claim.id) ? 'Processing...' : 'Claim'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

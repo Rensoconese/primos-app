@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPublicClient, custom, type PublicClient } from 'viem';
 import { ronin } from '@/utils/chain';
-import ContractInteraction from '@/components/ContractInteraction';
+import ContractInteractionV2 from '@/components/ContractInteractionV2';
 import RoninWallet from '@/components/wallet-connectors/ronin-wallet/RoninWallet';
 import NFTDisplay from '@/components/NFTDisplay/NFTDisplay';
 import RewardsPanel from '@/components/RewardsPanel/RewardsPanel';
@@ -25,6 +25,13 @@ export default function Home() {
   // Estado para mostrar banner de red incorrecta
   const [showNetworkWarning, setShowNetworkWarning] = useState<boolean>(false);
   const [networkWarningMessage, setNetworkWarningMessage] = useState<string>('');
+  
+  // Nuevos estados para el flujo separado
+  const [hasCheckedInToday, setHasCheckedInToday] = useState<boolean>(false);
+  const [canMine, setCanMine] = useState<boolean>(false);
+  const [hasMined, setHasMined] = useState<boolean>(false);
+  const [currentStreak, setCurrentStreak] = useState<number>(0);
+  const [currentMultiplier, setCurrentMultiplier] = useState<number>(1.0);
 
   // Función para obtener el nombre de la red
   const getNetworkName = (chainId: number): string => {
@@ -91,7 +98,8 @@ export default function Home() {
     
     const loadUserData = async () => {
       try {
-        const response = await fetch(`/api/user-data?wallet_address=${userAddress.toLowerCase()}`);
+        // Use V2 status endpoint
+        const response = await fetch(`/api/v2/status?wallet_address=${userAddress.toLowerCase()}`);
         const result = await response.json();
         
         if (result.error) {
@@ -99,10 +107,35 @@ export default function Home() {
           return;
         }
         
-        if (result.data) {
-          setTotalPoints(result.data.total_points || 0);
+        // Parse V2 response structure
+        if (result.user) {
+          // V2 doesn't have total_points (uses pending claims instead)
+          setTotalPoints(result.pending_claims?.total_points || 0);
+          setCurrentStreak(result.user.current_streak || 0);
+          
+          // Calculate multiplier
+          let mult = 1.0;
+          const streak = result.user.current_streak || 0;
+          if (streak >= 29) mult = 3.0;
+          else if (streak >= 22) mult = 2.5;
+          else if (streak >= 15) mult = 2.0;
+          else if (streak >= 8) mult = 1.5;
+          setCurrentMultiplier(mult);
+        }
+        
+        // V2 today status
+        if (result.today) {
+          setHasCheckedInToday(result.today.has_checked_in || false);
+          setCanMine(result.today.can_mine || false);
+          setHasMined(result.today.has_mined || false);
         } else {
+          // No user data yet
           setTotalPoints(0);
+          setCurrentStreak(0);
+          setCurrentMultiplier(1.0);
+          setHasCheckedInToday(false);
+          setCanMine(false);
+          setHasMined(false);
         }
       } catch (err) {
         console.error('Error in user data fetch:', err);
@@ -118,8 +151,22 @@ export default function Home() {
   }, [userAddress, userDataRefresh]);
 
   // Función para actualizar datos después de check-in
-  const handleDataRefresh = () => {
+  const handleCheckInSuccess = () => {
+    setHasCheckedInToday(true);
+    setCanMine(true);
+    setHasMined(false);
     setUserDataRefresh(prev => prev + 1);
+  };
+  
+  // Función para actualizar datos después de minar
+  const handleMiningSuccess = () => {
+    setCanMine(false);
+    setHasMined(true);
+    setUserDataRefresh(prev => prev + 1);
+    // Trigger rewards refresh after a short delay to ensure the backend has processed the mining
+    setTimeout(() => {
+      setUserDataRefresh(prev => prev + 1);
+    }, 500);
   };
   
   // Función separada para actualizar datos después de reclamar tokens
@@ -148,7 +195,6 @@ export default function Home() {
   
   // Memoizar la función de cambio de estado de carga para evitar bucles infinitos
   const handleNFTLoadingChange = useCallback((isLoading: boolean) => {
-    console.log("Estado de carga NFT cambiado:", isLoading);
     setNftCalculationInProgress(isLoading);
   }, []);
 
@@ -217,32 +263,44 @@ export default function Home() {
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <div className="px-4 py-6 sm:px-0">
             {provider ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-2">
-                  <ContractInteraction 
-                    walletClient={provider?.walletClient} 
-                    publicClient={viemClient}
-                    userAddress={userAddress}
-                    onCheckInSuccess={handleDataRefresh}
-                    nftCalculationInProgress={nftCalculationInProgress}
-                    refreshTrigger={userDataRefresh}
-                  />
+              <div className="space-y-6">
+                {/* Check-in Panel V2 - Full Width */}
+                <ContractInteractionV2 
+                  walletClient={provider?.walletClient} 
+                  publicClient={viemClient}
+                  userAddress={userAddress}
+                  onCheckInSuccess={handleCheckInSuccess}
+                />
+                
+                {/* Grid para NFT Display y Rewards Panel */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-2">
+                    {/* NFT Display with Mining Button */}
+                    <NFTDisplay 
+                      provider={provider} 
+                      userAddress={userAddress}
+                      refreshTrigger={userDataRefresh}
+                      onLoadingStateChange={handleNFTLoadingChange}
+                      hasCheckedInToday={hasCheckedInToday}
+                      canMine={canMine}
+                      onMiningSuccess={handleMiningSuccess}
+                    />
+                  </div>
                   
-                  <NFTDisplay 
-                    provider={provider} 
-                    userAddress={userAddress}
-                    refreshTrigger={userDataRefresh}
-                    onLoadingStateChange={handleNFTLoadingChange}
-                  />
+                  <div>
+                    <RewardsPanel 
+                      userAddress={userAddress} 
+                      totalPoints={totalPoints} 
+                      onRewardClaimed={handleRewardClaimed} 
+                      provider={provider}
+                      refreshTrigger={userDataRefresh}
+                    />
+                  </div>
                 </div>
                 
-                <div>
-                  <RewardsPanel 
-                    userAddress={userAddress} 
-                    totalPoints={totalPoints} 
-                    onRewardClaimed={handleRewardClaimed} 
-                    provider={provider}
-                  />
+                {/* How Rewards Work - Full Width */}
+                <div className="bg-gray-800 rounded-lg shadow-md p-6 text-white">
+                  <HowRewardsWorks />
                 </div>
               </div>
             ) : (

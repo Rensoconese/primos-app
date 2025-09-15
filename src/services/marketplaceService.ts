@@ -30,8 +30,6 @@ interface NFTListing {
  */
 export async function isNFTListed(contractAddress: string, tokenId: string, ownerAddress: string): Promise<boolean> {
   try {
-    console.log(`🏪 MARKETPLACE CHECK: Verificando NFT ${tokenId} para wallet ${ownerAddress}`);
-    
     // Obtener la URL base
     const baseUrl = typeof window !== 'undefined' 
       ? window.location.origin 
@@ -41,8 +39,14 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
     const isDevEnvironment = process.env.NODE_ENV === 'development';
     const refreshParam = isDevEnvironment ? '&refresh=true' : '';
     
-    // Hacer la solicitud con manejo de errores mejorado
-    const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${ownerAddress}&token_id=${tokenId}${refreshParam}`);
+    // Hacer la solicitud con timeout de 5 segundos
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(
+      `${baseUrl}/api/check-nft-listing?wallet_address=${ownerAddress}&token_id=${tokenId}${refreshParam}`,
+      { signal: controller.signal }
+    ).finally(() => clearTimeout(timeout));
     
     if (!response.ok) {
       throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -55,14 +59,14 @@ export async function isNFTListed(contractAddress: string, tokenId: string, owne
     }
     
     const isListed = data.isListed || false;
-    console.log(`🏪 MARKETPLACE RESULT: NFT ${tokenId} - ${isListed ? '❌ LISTADO (será bloqueado)' : '✅ NO LISTADO (disponible)'}`);
+    // Only log if NFT is actually listed
+    if (isListed) {
+      console.log(`NFT ${tokenId} is listed on marketplace`);
+    }
     
     return isListed;
   } catch (error) {
-    console.error(`🚨 ERROR checking if NFT is listed: ${error}`);
-    // IMPORTANTE: En caso de error, retornamos false pero logeamos claramente
-    // Esto podría estar causando que NFTs listados se marquen como disponibles
-    console.error(`⚠️  NFT ${tokenId} - ASUMIENDO NO LISTADO POR ERROR - Esto podría ser el problema!`);
+    // On error, assume not listed to avoid blocking
     return false;
   }
 }
@@ -93,7 +97,13 @@ export async function checkNFTsListingStatus(
         const isDevEnvironment = process.env.NODE_ENV === 'development';
         const refreshParam = isDevEnvironment ? '&refresh=true' : '';
         
-        const response = await fetch(`${baseUrl}/api/check-nft-listing?wallet_address=${lowerWalletAddress}&token_id=${nft.tokenId}${refreshParam}`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(
+          `${baseUrl}/api/check-nft-listing?wallet_address=${lowerWalletAddress}&token_id=${nft.tokenId}${refreshParam}`,
+          { signal: controller.signal }
+        ).finally(() => clearTimeout(timeout));
         
         if (!response.ok) {
           throw new Error(`API error: ${response.status} ${response.statusText}`);
