@@ -167,7 +167,19 @@ export function getFullSetNFTs(): NFTMapping[] {
 }
 `;
 
-    // 6. Escribir a GitHub
+    // 6. Escribir archivo localmente primero (IMPORTANTE: para evitar desfase con GitHub)
+    try {
+      const fs = await import('fs/promises');
+      const pathModule = await import('path');
+      const localPath = pathModule.join(process.cwd(), 'src', 'data', 'nftMappings.ts');
+      await fs.writeFile(localPath, fileContent, 'utf-8');
+      console.log('✅ Archivo nftMappings.ts escrito localmente');
+    } catch (localError) {
+      console.error('❌ Error escribiendo archivo local:', localError);
+      // Continuar aunque falle el archivo local
+    }
+
+    // 7. Escribir a GitHub
     let fileWritten = false;
     let commitSha = '';
     
