@@ -1,5 +1,5 @@
 // Mapa de puntos de NFTs
-// Generado automáticamente el 2025-09-19T13:36:28.762Z
+// Generado automáticamente el 2025-09-24T13:50:40.043Z
 // NO MODIFICAR MANUALMENTE
 // Basado en: src/data/nftMappings.ts
 // Total de NFTs: 3000
@@ -354,7 +354,7 @@ export const NFT_POINTS: Record<string, number> = {
   "347": 1,
   "348": 1,
   "349": 1,
-  "350": 1,
+  "350": 4,
   "351": 1,
   "352": 1,
   "353": 1,
@@ -577,7 +577,7 @@ export const NFT_POINTS: Record<string, number> = {
   "570": 1,
   "571": 1,
   "572": 1,
-  "573": 10,
+  "573": 1,
   "574": 1,
   "575": 1,
   "576": 1,
@@ -1547,7 +1547,7 @@ export const NFT_POINTS: Record<string, number> = {
   "1540": 4,
   "1541": 1,
   "1542": 1,
-  "1543": 7,
+  "1543": 22,
   "1544": 1,
   "1545": 1,
   "1546": 1,
@@ -1687,7 +1687,7 @@ export const NFT_POINTS: Record<string, number> = {
   "1680": 1,
   "1681": 6,
   "1682": 1,
-  "1683": 10,
+  "1683": 12,
   "1684": 1,
   "1685": 3,
   "1686": 1,
