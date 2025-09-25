@@ -14236,7 +14236,7 @@ export const NFT_MAPPINGS: NFTMapping[] = [
   },
   {
     "token_id": 2846,
-    "rarity": "original",
+    "rarity": "shiny Z",
     "is_full_set": false
   },
   {
@@ -15009,7 +15009,7 @@ export const NFT_MAPPINGS: NFTMapping[] = [
     "rarity": "original Z",
     "is_full_set": false
   }
-];
+]
 
 /**
  * Obtiene todos los NFTs que son Full Set
