@@ -78,6 +78,16 @@ export default function AdminPage() {
           <p className="text-gray-400">Visualizar todos los puntos generados por NFT</p>
           <p className="text-blue-400 text-sm mt-2">📊 Análisis</p>
         </div>
+
+        {/* Actualizar Rareza Individual */}
+        <div 
+          onClick={() => router.push('/admin/update-rarity')}
+          className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors border-2 border-yellow-600"
+        >
+          <h2 className="text-xl font-semibold text-white mb-2">Actualizar Rareza</h2>
+          <p className="text-gray-400">Cambiar rareza de un NFT específico</p>
+          <p className="text-yellow-400 text-sm mt-2">⚡ Actualización rápida</p>
+        </div>
       </div>
     </div>
   );

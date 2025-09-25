@@ -84,14 +84,23 @@ export async function POST(request: Request) {
       const fileContent = await fs.readFile(mappingPath, 'utf-8');
       
       // Extraer el array NFT_MAPPINGS del archivo TypeScript
-      // El regex debe capturar arrays muy grandes con saltos de línea
-      const mappingsMatch = fileContent.match(/export const NFT_MAPPINGS: NFTMapping\[\] = (\[[\s\S]*?\]);/);
-      if (!mappingsMatch) {
+      // Buscar donde empieza y termina el array
+      const declarationLine = 'export const NFT_MAPPINGS: NFTMapping[] = ';
+      const startIdx = fileContent.indexOf(declarationLine);
+      if (startIdx === -1) {
         throw new Error('No se encontró NFT_MAPPINGS en el archivo');
       }
       
-      // Parsear el JSON
-      nftMappings = JSON.parse(mappingsMatch[1]);
+      const arrayStart = startIdx + declarationLine.length;
+      // Buscar el cierre del array (puede ser ] o ];)
+      const arrayEnd = fileContent.indexOf('\n]', arrayStart);
+      if (arrayEnd === -1) {
+        throw new Error('No se encontró el cierre del array NFT_MAPPINGS');
+      }
+      
+      // Extraer y parsear el JSON
+      const jsonString = fileContent.substring(arrayStart, arrayEnd + 2);
+      nftMappings = JSON.parse(jsonString);
       console.log(`✅ Archivo de mapeo leído: ${nftMappings.length} NFTs`);
       
     } catch (fileError) {
@@ -113,14 +122,35 @@ export async function POST(request: Request) {
           ref: 'main'
         });
         
-        if ('content' in fileData) {
-          const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
-          // El regex debe capturar arrays muy grandes con saltos de línea
-          const mappingsMatch = content.match(/export const NFT_MAPPINGS: NFTMapping\[\] = (\[[\s\S]*?\]);/);
-          if (!mappingsMatch) {
+        let content: string;
+        if ('content' in fileData && !Array.isArray(fileData)) {
+          // Si el archivo es pequeño, el contenido viene directamente
+          if (fileData.content) {
+            content = Buffer.from(fileData.content, 'base64').toString('utf-8');
+          } else {
+            // Si el archivo es grande (>1MB), usar blob API
+            const blobResponse = await octokit.rest.git.getBlob({
+              owner: 'Rensoconese',
+              repo: 'primos-app',
+              file_sha: fileData.sha,
+            });
+            content = Buffer.from(blobResponse.data.content, 'base64').toString('utf-8');
+          }
+          // Buscar donde empieza y termina el array
+          const declarationLine = 'export const NFT_MAPPINGS: NFTMapping[] = ';
+          const startIdx = content.indexOf(declarationLine);
+          if (startIdx === -1) {
             throw new Error('No se encontró NFT_MAPPINGS en el archivo de GitHub');
           }
-          nftMappings = JSON.parse(mappingsMatch[1]);
+          
+          const arrayStart = startIdx + declarationLine.length;
+          const arrayEnd = content.indexOf('\n]', arrayStart);
+          if (arrayEnd === -1) {
+            throw new Error('No se encontró el cierre del array NFT_MAPPINGS en GitHub');
+          }
+          
+          const jsonString = content.substring(arrayStart, arrayEnd + 2);
+          nftMappings = JSON.parse(jsonString);
           console.log(`✅ Archivo de mapeo obtenido desde GitHub: ${nftMappings.length} NFTs`);
         }
       } catch (githubError) {
