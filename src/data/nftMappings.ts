@@ -14236,7 +14236,7 @@ export const NFT_MAPPINGS: NFTMapping[] = [
   },
   {
     "token_id": 2846,
-    "rarity": "original",
+    "rarity": "original Z",
     "is_full_set": false
   },
   {
