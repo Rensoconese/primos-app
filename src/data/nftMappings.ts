@@ -6881,7 +6881,7 @@ export const NFT_MAPPINGS: NFTMapping[] = [
   },
   {
     "token_id": 1375,
-    "rarity": "original",
+    "rarity": "original Z summer",
     "is_full_set": false
   },
   {
